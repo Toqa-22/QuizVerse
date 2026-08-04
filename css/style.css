@@ -287,6 +287,32 @@ a{color:var(--violet-dark)}
 .mp-room-stats span{font-size:.78rem;color:var(--ink-2);font-weight:600}
 .mp-players{list-style:none;padding:0;margin:0 0 20px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 .mp-players li{background:var(--surface-tint);border:2px solid var(--border);border-radius:var(--radius-pill);padding:6px 14px;font-size:.85rem;font-weight:700}
+
+/* ---------------- أفضل 3 لاعبين داخل الغرفة (مباشر أثناء الانتظار/اللعب) ---------------- */
+.mp-top3{margin:4px 0 20px;text-align:start}
+.mp-top3-label{margin:0 0 10px;font-weight:800;font-size:.85rem;color:var(--ink-2);text-align:center}
+.mp-top3-list{display:flex;flex-direction:column;gap:8px}
+.mp-top3-row{
+  display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-md);
+  background:var(--surface-tint);border:2px solid var(--border-soft);
+}
+.mp-top3-row.rank-1{background:linear-gradient(135deg, rgba(255,176,32,.22), rgba(255,176,32,.06));border-color:var(--border)}
+.mp-top3-row.rank-2{background:linear-gradient(135deg, rgba(122,122,140,.18), rgba(122,122,140,.05));border-color:var(--border)}
+.mp-top3-row.rank-3{background:linear-gradient(135deg, rgba(255,92,138,.18), rgba(255,92,138,.05));border-color:var(--border)}
+.mp-top3-medal{font-size:1.2rem;flex-shrink:0}
+.mp-top3-avatar{
+  width:30px;height:30px;border-radius:50%;background:var(--grad-primary);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:900;flex-shrink:0;
+}
+.mp-top3-name{flex:1;font-weight:700;font-size:.85rem;text-align:start;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-top3-score{font-family:var(--font-display);font-weight:900;color:var(--violet-dark);flex-shrink:0}
+
+/* ---------------- شاشة ترتيب الغرف ---------------- */
+.room-rank-card{margin-bottom:16px}
+.room-rank-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.room-rank-head h3{margin:0 0 4px}
+.room-rank-list{max-height:340px;overflow-y:auto}
+
 .mp-waiting-indicator{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--ink-2);font-size:.9rem;font-weight:600}
 .dot-pulse{width:9px;height:9px;border-radius:50%;background:var(--teal);animation:pulse 1.4s ease-in-out infinite}
 
@@ -334,6 +360,8 @@ a{color:var(--violet-dark)}
 .feedback-panel.is-correct .feedback-icon{background:var(--green);color:#fff}
 .feedback-panel.is-wrong{background:rgba(239,68,68,.1)}
 .feedback-panel.is-wrong .feedback-icon{background:var(--error);color:#fff}
+.feedback-panel.is-partial{background:rgba(245,179,1,.14)}
+.feedback-panel.is-partial .feedback-icon{background:var(--amber);color:#fff}
 .feedback-panel h3{font-family:var(--font-body);font-weight:900}
 
 /* ---------------- صح / خطأ ---------------- */
@@ -368,21 +396,23 @@ a{color:var(--violet-dark)}
 .match-chip.dragging{opacity:.85;box-shadow:var(--shadow-pop);pointer-events:none}
 .match-chip.dim{opacity:.35}
 
-/* ---------------- ترتيب (سحب لإعادة الترتيب) ---------------- */
+/* ---------------- ترتيب (أزرار ⬆️/⬇️ بدل السحب والإفلات) ---------------- */
 .order-list{display:flex;flex-direction:column;gap:10px}
 .order-item{
   display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--radius-md);
   background:var(--surface-tint);border:2.5px solid var(--border);box-shadow:var(--shadow-pop-sm);
-  transition:box-shadow .15s;
+  transition:box-shadow .2s ease, transform .2s ease, background .2s ease;
 }
-.order-item.dragging{box-shadow:var(--shadow-pop);position:relative}
 .order-item.correct{background:rgba(34,197,94,.15);border-color:var(--green)}
 .order-item.wrong{background:rgba(239,68,68,.1);border-color:var(--error)}
-.order-handle{
+.order-item.order-swapped{transform:scale(1.02);box-shadow:var(--shadow-pop);background:rgba(109,91,255,.1)}
+.order-move-btn{
   flex-shrink:0;width:34px;height:34px;border-radius:50%;background:var(--surface);border:2px solid var(--border);
-  display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:grab;touch-action:none;user-select:none;color:var(--ink-2);
+  display:flex;align-items:center;justify-content:center;font-size:1rem;color:var(--ink-2);
+  transition:transform .12s ease, opacity .12s ease;
 }
-.order-handle:active{cursor:grabbing}
+.order-move-btn:not(:disabled):active{transform:scale(.9)}
+.order-move-btn:disabled{opacity:.3;cursor:not-allowed}
 .order-text{font-weight:700;flex:1}
 
 /* ---------------- results ---------------- */
@@ -631,17 +661,18 @@ a{color:var(--violet-dark)}
 
 /* ---------------- achievements ---------------- */
 .achv-grid{
-  display:grid;grid-template-columns:repeat(auto-fill, minmax(110px,1fr));gap:12px;margin-top:10px;
+  display:grid;grid-template-columns:repeat(auto-fill, minmax(140px,1fr));gap:12px;margin-top:10px;
 }
 .achv-badge{
   display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;
-  padding:14px 8px;border-radius:var(--radius-md);border:2.5px solid var(--border-soft);
+  padding:14px 10px;border-radius:var(--radius-md);border:2.5px solid var(--border-soft);
   background:var(--surface-tint);
 }
 .achv-badge.unlocked{border-color:var(--border);background:var(--grad-warm);box-shadow:var(--shadow-pop-sm)}
-.achv-badge.locked{opacity:.55}
+.achv-badge.locked{opacity:.6}
 .achv-icon{font-size:1.6rem}
 .achv-name{font-size:.72rem;font-weight:700}
+.achv-desc{margin:0;font-size:.68rem;font-weight:600;color:var(--ink-2);line-height:1.4}
 
 /* ---------------- profile ---------------- */
 .profile-grid{
