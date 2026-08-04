@@ -64,6 +64,75 @@ const Multiplayer = (function(){
     document.getElementById("mp-room-count").textContent = players.length;
     const list = document.getElementById("mp-players");
     list.innerHTML = players.map(p => `<li>${p.avatar ? p.avatar + " " : ""}${escapeHtml(p.name)}</li>`).join("") || `<li class="muted">لا يوجد لاعبون بعد</li>`;
+
+    renderTopPlayers(players);
+  }
+
+  /* أفضل 3 لاعبين في هذه الغرفة تحديدًا، حسب نقاطهم داخل الغرفة نفسها */
+  function renderTopPlayers(players){
+    const box = document.getElementById("mp-top3");
+    const listEl = document.getElementById("mp-top3-list");
+    const top3 = players.slice().sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 3);
+
+    if (!top3.length || top3.every(p => !(p.score > 0))){
+      box.hidden = true;
+      return;
+    }
+
+    box.hidden = false;
+    const medals = ["🥇", "🥈", "🥉"];
+    listEl.innerHTML = top3.map((p, i) => `
+      <div class="mp-top3-row rank-${i + 1}">
+        <span class="mp-top3-medal">${medals[i]}</span>
+        <span class="mp-top3-avatar">${p.avatar || (p.name || "?").charAt(0).toUpperCase()}</span>
+        <span class="mp-top3-name">${escapeHtml(p.name || "لاعب")}</span>
+        <span class="mp-top3-score">${p.score || 0}</span>
+      </div>
+    `).join("");
+  }
+
+  /* ---------------- شاشة "ترتيب الغرف": ترتيب كل اللاعبين داخل كل غرفة،
+     يبقى محفوظًا حتى يحذف المشرف الغرفة يدويًا (لا يُصفَّر تلقائيًا). ---------------- */
+  async function renderRoomRankingsScreen(){
+    const wrap = document.getElementById("room-rankings-list");
+    wrap.innerHTML = `<p class="muted">جارٍ التحميل...</p>`;
+
+    const games = await QV.getGames();
+    if (!games.length){
+      wrap.innerHTML = `<div class="mp-empty">لا توجد غرف جماعية بعد.</div>`;
+      return;
+    }
+
+    const cards = await Promise.all(games.map(async (g) => {
+      const players = await QV.getGamePlayers(g.id);
+      const ranked = players.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+      const statusLabel = { waiting: "بانتظار البدء", started: "جارية الآن", finished: "منتهية" }[g.status] || g.status;
+
+      const rows = ranked.length ? ranked.map((p, i) => {
+        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+        return `
+          <div class="lb-row${i < 3 ? " top-3 rank-" + (i + 1) : ""}">
+            <span class="lb-rank">${typeof medal === "string" ? `<span class="lb-medal">${medal}</span>` : medal}</span>
+            <span class="lb-avatar">${p.avatar || (p.name || "?").charAt(0).toUpperCase()}</span>
+            <span class="lb-info"><strong>${escapeHtml(p.name || "لاعب")}</strong></span>
+            <span class="lb-score">${p.score || 0}<span class="lb-score-label">نقطة</span></span>
+          </div>`;
+      }).join("") : `<p class="muted" style="padding:10px 0">لا يوجد لاعبون في هذه الغرفة بعد</p>`;
+
+      return `
+        <div class="glass-card room-rank-card">
+          <div class="room-rank-head">
+            <div>
+              <h3>${escapeHtml(g.title)}</h3>
+              <span class="mp-tag">${catIcon(g.category)} ${catName(g.category)} · ${ranked.length} لاعب</span>
+            </div>
+            <span class="mp-status ${g.status}">${statusLabel}</span>
+          </div>
+          <div class="lb-list room-rank-list">${rows}</div>
+        </div>`;
+    }));
+
+    wrap.innerHTML = cards.join("");
   }
 
   function watch(){
@@ -121,5 +190,5 @@ const Multiplayer = (function(){
     return div.innerHTML;
   }
 
-  return { renderList, join, get currentGame(){ return currentGame; } };
+  return { renderList, join, renderRoomRankingsScreen, get currentGame(){ return currentGame; } };
 })();
