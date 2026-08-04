@@ -1,0 +1,801 @@
+/* =========================================================
+   طبقة الاتصال بـ Supabase
+   توفر واجهة موحّدة لـ: المصادقة (حسابات اللاعبين)، الملفات
+   الشخصية، سجل الألعاب، الإنجازات، الأسئلة، الغرف الجماعية،
+   ولوحة المتصدرين — مع رجوع تلقائي لبيانات محلية (Demo Mode)
+   عند عدم توفر إعدادات Supabase صحيحة.
+   ========================================================= */
+
+const QV = (function(){
+  let client = null;
+  let demoMode = true;
+  let currentSession = null; // { id, username } في الوضع التجريبي أو { user } الحقيقي
+
+  function isConfigured(){
+    return QUIZVERSE_CONFIG.SUPABASE_URL.includes("supabase.co") &&
+           !QUIZVERSE_CONFIG.SUPABASE_URL.includes("YOUR-PROJECT-REF") &&
+           QUIZVERSE_CONFIG.SUPABASE_ANON_KEY &&
+           QUIZVERSE_CONFIG.SUPABASE_ANON_KEY !== "YOUR-SUPABASE-ANON-PUBLIC-KEY";
+  }
+
+  function init(){
+    if (isConfigured() && window.supabase){
+      try{
+        client = window.supabase.createClient(QUIZVERSE_CONFIG.SUPABASE_URL, QUIZVERSE_CONFIG.SUPABASE_ANON_KEY, {
+          realtime: { params: { eventsPerSecond: 10 } }
+        });
+        demoMode = false;
+      }catch(e){
+        console.warn("تعذّر تهيئة Supabase، سيتم استخدام الوضع التجريبي المحلي.", e);
+        demoMode = true;
+      }
+    } else {
+      demoMode = true;
+    }
+    return { demoMode };
+  }
+
+  /* ---------------- local demo storage (localStorage) ---------------- */
+  const LS_KEYS = {
+    questions: "qv_demo_questions",
+    accounts: "qv_demo_accounts",     // username(lowercase) -> { id, username, passwordHash }
+    profiles: "qv_demo_profiles",     // id -> profile object
+    session: "qv_demo_session",       // { id, username }
+    history: "qv_demo_history",       // array of game_history rows
+    games: "qv_demo_games",
+    players: "qv_demo_players",
+    settings: "qv_demo_settings",     // { category: questionCount }
+    quizSettings: "qv_demo_quiz_settings", // { shuffleQuestions, shuffleAnswers, preventRepetition, randomGeneration }
+    timers: "qv_demo_category_timers", // { category: seconds }
+    ageTimers: "qv_demo_age_timers",   // [{ id, min_age, max_age, time_seconds }]
+    adminAccounts: "qv_demo_admin_accounts", // username(lowercase) -> { username, passwordHash } — نفس آلية bootstrap
+  };
+
+  function lsGet(key, fallback){
+    try{
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    }catch(e){ return fallback; }
+  }
+  function lsSet(key, value){
+    try{ localStorage.setItem(key, JSON.stringify(value)); }catch(e){/* ignore quota errors */}
+  }
+
+  function ensureDemoQuestions(){
+    let q = lsGet(LS_KEYS.questions, null);
+    if (!q){
+      // كل سؤال بلا نوع محدد (كل الأسئلة القديمة الحالية) يُعامَل تلقائيًا
+      // كسؤال "اختيار من متعدد" — لا تغيير في سلوكها إطلاقًا
+      q = DEMO_QUESTIONS.map((item, i) => ({ id: "demo-" + i, ...item, type: item.type || "multiple_choice" }));
+      lsSet(LS_KEYS.questions, q);
+    }
+    return q;
+  }
+
+  /* بصمة بسيطة غير تشفيرية لكلمة المرور — تكفي للوضع التجريبي المحلي فقط.
+     في الإنتاج الفعلي، تشفير كلمات المرور تتولاه Supabase Auth بالكامل. */
+  function simpleHash(str){
+    let h = 5381;
+    for (let i = 0; i < str.length; i++){ h = ((h << 5) + h) + str.charCodeAt(i); h |= 0; }
+    return "h" + Math.abs(h).toString(36);
+  }
+
+  function newId(prefix){ return prefix + "-" + Date.now() + "-" + Math.floor(Math.random()*1e5); }
+
+  function defaultProfile({ id, username, age, avatar }){
+    return {
+      id, username, avatar: avatar || QUIZVERSE_AVATARS[0], age,
+      total_score: 0, level: "مبتدئ", games_played: 0, correct_answers: 0,
+      streak: 0, last_played_date: null, favorite_category: null,
+      achievements: [], completed_combos: [], replay_grants: {},
+      recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  /* ================= AUTH (اسم مستخدم وكلمة مرور فقط — بدون بريد إلكتروني إطلاقًا) =================
+     في الوضع التجريبي: الحسابات في localStorage.
+     في وضع Supabase الحقيقي: لا نستخدم Supabase Auth نهائيًا (الذي يتطلب بريدًا)؛ بل نستدعي
+     دالتي RPC آمنتين register_player / verify_login (راجع sql/schema.sql) تتحققان من اسم
+     المستخدم وكلمة المرور مباشرة في جدول player_accounts المحمي (غير قابل للقراءة من العميل)،
+     وتُعيدان فقط معرّف الحساب دون كشف كلمة المرور المشفّرة لأي طرف. */
+  async function signUp({ username, password, age, avatar }){
+    username = (username || "").trim();
+    if (!username || !password) throw new Error("الرجاء تعبئة جميع الحقول");
+    if (username.length < 3) throw new Error("اسم المستخدم قصير جدًا (3 أحرف على الأقل)");
+    if (!/^[a-zA-Z0-9_\u0600-\u06FF]+$/.test(username)) throw new Error("اسم المستخدم يجب أن يحتوي أحرفًا وأرقامًا فقط");
+    if (password.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 أحرف");
+
+    const passwordHash = simpleHash(password);
+    let id;
+
+    if (demoMode){
+      const accounts = lsGet(LS_KEYS.accounts, {});
+      const key = username.toLowerCase();
+      if (accounts[key]) throw new Error("اسم المستخدم مستخدم بالفعل، جرّب اسمًا آخر");
+      id = newId("user");
+      accounts[key] = { id, username, passwordHash };
+      lsSet(LS_KEYS.accounts, accounts);
+    } else {
+      const { data, error } = await client.rpc("register_player", { p_username: username, p_password_hash: passwordHash });
+      if (error) throw new Error(/مستخدم/.test(error.message) ? "اسم المستخدم مستخدم بالفعل، جرّب اسمًا آخر" : error.message);
+      id = data;
+    }
+
+    const profile = defaultProfile({ id, username, age, avatar });
+    if (demoMode){
+      const profiles = lsGet(LS_KEYS.profiles, {});
+      profiles[id] = profile;
+      lsSet(LS_KEYS.profiles, profiles);
+    } else {
+      const { error: insertErr } = await client.from("profiles").insert(profile);
+      if (insertErr) throw insertErr;
+    }
+
+    currentSession = { id, username };
+    lsSet(LS_KEYS.session, currentSession);
+    return profile;
+  }
+
+  async function signIn({ username, password }){
+    username = (username || "").trim();
+    const passwordHash = simpleHash(password);
+    let id;
+
+    if (demoMode){
+      const accounts = lsGet(LS_KEYS.accounts, {});
+      const acc = accounts[username.toLowerCase()];
+      if (!acc || acc.passwordHash !== passwordHash) throw new Error("اسم المستخدم أو كلمة المرور غير صحيحة");
+      id = acc.id;
+    } else {
+      const { data, error } = await client.rpc("verify_login", { p_username: username, p_password_hash: passwordHash });
+      if (error || !data) throw new Error("اسم المستخدم أو كلمة المرور غير صحيحة");
+      id = data;
+    }
+
+    currentSession = { id, username };
+    lsSet(LS_KEYS.session, currentSession);
+    return getProfile(id);
+  }
+
+  async function signOut(){
+    currentSession = null;
+    localStorage.removeItem(LS_KEYS.session);
+  }
+
+  async function restoreSession(){
+    const saved = lsGet(LS_KEYS.session, null);
+    if (!saved) return null;
+    currentSession = saved;
+    return getProfile(saved.id);
+  }
+
+  function getCurrentUserId(){
+    return currentSession ? currentSession.id : null;
+  }
+
+  async function changePassword(newPassword){
+    if (newPassword.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 أحرف");
+    if (!currentSession) throw new Error("الرجاء تسجيل الدخول أولًا");
+    const passwordHash = simpleHash(newPassword);
+
+    if (demoMode){
+      const accounts = lsGet(LS_KEYS.accounts, {});
+      const key = currentSession.username.toLowerCase();
+      if (!accounts[key]) throw new Error("تعذّر إيجاد الحساب");
+      accounts[key].passwordHash = passwordHash;
+      lsSet(LS_KEYS.accounts, accounts);
+      return true;
+    }
+    const { error } = await client.rpc("set_player_password", { p_id: currentSession.id, p_new_hash: passwordHash });
+    if (error) throw error;
+    return true;
+  }
+
+  /* ================= PROFILES ================= */
+  async function getProfile(userId){
+    if (demoMode){
+      const profiles = lsGet(LS_KEYS.profiles, {});
+      return profiles[userId] || null;
+    }
+    const { data, error } = await client.from("profiles").select("*").eq("id", userId).single();
+    if (error){ console.error(error); return null; }
+    return data;
+  }
+
+  async function updateProfile(userId, patch){
+    if (demoMode){
+      const profiles = lsGet(LS_KEYS.profiles, {});
+      if (!profiles[userId]) throw new Error("الملف الشخصي غير موجود");
+      profiles[userId] = { ...profiles[userId], ...patch };
+      lsSet(LS_KEYS.profiles, profiles);
+      return profiles[userId];
+    }
+    const { data, error } = await client.from("profiles").update(patch).eq("id", userId).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function listAllProfiles(){
+    if (demoMode){
+      const profiles = lsGet(LS_KEYS.profiles, {});
+      return Object.values(profiles);
+    }
+    const { data, error } = await client.from("profiles").select("*");
+    if (error){ console.error(error); return []; }
+    return data;
+  }
+
+  async function getRank(userId){
+    const all = await listAllProfiles();
+    const sorted = all.slice().sort((a,b) => (b.total_score||0) - (a.total_score||0));
+    const idx = sorted.findIndex(p => p.id === userId);
+    return idx === -1 ? null : idx + 1;
+  }
+
+  /* ================= GAME HISTORY ================= */
+  async function addGameHistory(entry){
+    const row = { id: newId("hist"), played_at: new Date().toISOString(), ...entry };
+    if (demoMode){
+      const hist = lsGet(LS_KEYS.history, []);
+      hist.unshift(row);
+      lsSet(LS_KEYS.history, hist);
+      return row;
+    }
+    const { data, error } = await client.from("game_history").insert(entry).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function getGameHistory(userId, limit = 8){
+    if (demoMode){
+      const hist = lsGet(LS_KEYS.history, []);
+      return hist.filter(h => h.user_id === userId).slice(0, limit);
+    }
+    const { data, error } = await client.from("game_history").select("*").eq("user_id", userId).order("played_at", { ascending: false }).limit(limit);
+    if (error){ console.error(error); return []; }
+    return data;
+  }
+
+  async function getAllHistory(){
+    if (demoMode) return lsGet(LS_KEYS.history, []);
+    const { data, error } = await client.from("game_history").select("*");
+    if (error){ console.error(error); return []; }
+    return data;
+  }
+
+  /* ================= ACHIEVEMENTS ================= */
+  function computeAchievements(profile, rank){
+    return QUIZVERSE_ACHIEVEMENTS.map(a => ({
+      ...a,
+      unlocked: a.check(profile, rank),
+    }));
+  }
+
+  async function syncAchievements(profile, rank){
+    const computed = computeAchievements(profile, rank);
+    const unlockedIds = computed.filter(a => a.unlocked).map(a => a.id);
+    const prevIds = profile.achievements || [];
+    const newlyUnlocked = unlockedIds.filter(id => !prevIds.includes(id));
+    if (unlockedIds.length !== prevIds.length){
+      await updateProfile(profile.id, { achievements: unlockedIds });
+      profile.achievements = unlockedIds;
+    }
+    return { computed, newlyUnlocked };
+  }
+
+  /* ================= QUIZ RESULT SUBMISSION ================= */
+  async function submitQuizResult({ userId, result, gameId }){
+    const profile = await getProfile(userId);
+    if (!profile) throw new Error("الرجاء تسجيل الدخول أولًا");
+
+    const today = new Date().toISOString().slice(0, 10);
+    let streak = profile.streak || 0;
+    if (profile.last_played_date){
+      const last = new Date(profile.last_played_date);
+      const diffDays = Math.round((new Date(today) - new Date(last.toISOString().slice(0,10))) / 86400000);
+      if (diffDays === 1) streak += 1;
+      else if (diffDays > 1) streak = 1;
+      // diffDays === 0 (same day) -> streak unchanged
+    } else {
+      streak = 1;
+    }
+
+    const patch = {
+      total_score: (profile.total_score || 0) + result.score,
+      games_played: (profile.games_played || 0) + 1,
+      correct_answers: (profile.correct_answers || 0) + result.correctCount,
+      streak,
+      last_played_date: today,
+      favorite_category: result.category || profile.favorite_category,
+      level: levelForScore((profile.total_score || 0) + result.score).name,
+    };
+
+    // تتبّع فئة+مستوى مكتملة، واستهلاك محاولة إضافية إن كانت ممنوحة من المشرف،
+    // وتسجيل أسئلة هذا الاختبار كـ"حديثة" لمنع تكرارها في المرة القادمة
+    if (result.difficulty){
+      const comboKey = result.category + ":" + result.difficulty;
+      const completed = (profile.completed_combos || []).slice();
+      const grants = { ...(profile.replay_grants || {}) };
+      if (completed.includes(comboKey)){
+        if (grants[comboKey] > 0) grants[comboKey] -= 1;
+      } else {
+        completed.push(comboKey);
+      }
+      patch.completed_combos = completed;
+      patch.replay_grants = grants;
+
+      if (result.questionIds && result.questionIds.length){
+        const recent = { ...(profile.recent_questions || {}) };
+        const prevIds = recent[comboKey] || [];
+        const merged = prevIds.concat(result.questionIds);
+        recent[comboKey] = merged.slice(-60); // نحتفظ بآخر 60 معرّفًا فقط لكل تركيبة
+        patch.recent_questions = recent;
+      }
+    }
+
+    const updated = await updateProfile(userId, patch);
+
+    await addGameHistory({
+      user_id: userId, game_id: gameId || null, category: result.category,
+      score: result.score, correct_count: result.correctCount, total: result.total,
+    });
+
+    const rank = await getRank(userId);
+    const { newlyUnlocked } = await syncAchievements(updated, rank);
+
+    return { profile: updated, rank, newlyUnlocked };
+  }
+
+  /* ================= PLAY RESTRICTIONS (مرة واحدة لكل فئة+مستوى) ================= */
+  function canPlay(profile, category, difficulty){
+    if (!profile || !category || !difficulty) return true;
+    const key = category + ":" + difficulty;
+    const completed = profile.completed_combos || [];
+    if (!completed.includes(key)) return true;
+    const grants = profile.replay_grants || {};
+    return (grants[key] || 0) > 0;
+  }
+
+  async function grantReplay(userId, category, difficulty){
+    const profile = await getProfile(userId);
+    if (!profile) throw new Error("اللاعب غير موجود");
+    const key = category + ":" + difficulty;
+    const grants = { ...(profile.replay_grants || {}) };
+    grants[key] = (grants[key] || 0) + 1;
+    return updateProfile(userId, { replay_grants: grants });
+  }
+
+  /* ================= QUESTION-COUNT SETTINGS (لكل فئة) ================= */
+  async function getQuestionCounts(){
+    if (demoMode) return lsGet(LS_KEYS.settings, {});
+    const { data, error } = await client.from("app_settings").select("value").eq("key", "question_counts").maybeSingle();
+    if (error || !data) return {};
+    return data.value || {};
+  }
+
+  async function saveQuestionCounts(counts){
+    if (demoMode){ lsSet(LS_KEYS.settings, counts); return counts; }
+    const { error } = await client.from("app_settings").upsert({ key: "question_counts", value: counts });
+    if (error) throw error;
+    return counts;
+  }
+
+  /* ================= CATEGORY TIMER SETTINGS (مؤقت مستقل لكل فئة، بالثواني) ================= */
+  async function getCategoryTimers(){
+    if (demoMode) return lsGet(LS_KEYS.timers, {});
+    const { data, error } = await client.from("app_settings").select("value").eq("key", "category_timers").maybeSingle();
+    if (error || !data) return {};
+    return data.value || {};
+  }
+
+  async function saveCategoryTimers(timers){
+    // نضمن أن كل قيمة ثانية صحيحة >= 1 قبل الحفظ (لا صفر ولا أرقام سالبة)
+    const clean = {};
+    Object.entries(timers || {}).forEach(([cat, secs]) => {
+      const n = Math.floor(Number(secs));
+      clean[cat] = Number.isFinite(n) && n >= 1 ? n : QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
+    });
+    if (demoMode){ lsSet(LS_KEYS.timers, clean); return clean; }
+    const { error } = await client.from("app_settings").upsert({ key: "category_timers", value: clean });
+    if (error) throw error;
+    return clean;
+  }
+
+  /* ================= AGE-BASED TIMER SETTINGS (مؤقت الأسئلة حسب الفئة العمرية) =================
+     له أولوية على مؤقت الفئة المعرفية عند وجود فئة عمرية مطابقة لعمر اللاعب —
+     راجع resolveQuestionTimer أدناه لمنطق الأولوية الكامل. */
+  async function getAgeTimerSettings(){
+    if (demoMode){
+      return lsGet(LS_KEYS.ageTimers, []).slice().sort((a, b) => a.min_age - b.min_age);
+    }
+    const { data, error } = await client.from("quiz_timer_settings").select("*").order("min_age", { ascending: true });
+    if (error){ console.error(error); return []; }
+    return data || [];
+  }
+
+  async function saveAgeTimerSetting(setting){
+    const clean = {
+      id: setting.id || undefined,
+      min_age: Math.max(0, Math.floor(Number(setting.min_age) || 0)),
+      max_age: Math.max(0, Math.floor(Number(setting.max_age) || 0)),
+      time_seconds: Math.max(1, Math.floor(Number(setting.time_seconds) || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION)),
+    };
+    if (clean.min_age > clean.max_age){
+      throw new Error("العمر الأدنى يجب أن يكون أقل من أو يساوي العمر الأقصى");
+    }
+
+    if (demoMode){
+      const all = lsGet(LS_KEYS.ageTimers, []);
+      if (clean.id){
+        const updated = all.map(s => s.id === clean.id ? { ...s, ...clean } : s);
+        lsSet(LS_KEYS.ageTimers, updated);
+        return clean;
+      }
+      clean.id = "agetimer-" + Date.now();
+      all.push(clean);
+      lsSet(LS_KEYS.ageTimers, all);
+      return clean;
+    }
+
+    if (clean.id){
+      const { data, error } = await client.from("quiz_timer_settings")
+        .update({ min_age: clean.min_age, max_age: clean.max_age, time_seconds: clean.time_seconds, updated_at: new Date().toISOString() })
+        .eq("id", clean.id).select().single();
+      if (error) throw error;
+      return data;
+    }
+    delete clean.id;
+    const { data, error } = await client.from("quiz_timer_settings").insert(clean).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function deleteAgeTimerSetting(id){
+    if (demoMode){
+      const all = lsGet(LS_KEYS.ageTimers, []).filter(s => s.id !== id);
+      lsSet(LS_KEYS.ageTimers, all);
+      return true;
+    }
+    const { error } = await client.from("quiz_timer_settings").delete().eq("id", id);
+    if (error) throw error;
+    return true;
+  }
+
+  /* يحسم مؤقت السؤال النهائي لهذا اللاعب بحسب الأولوية التالية:
+     1) فئة عمرية مطابقة لعمر اللاعب في quiz_timer_settings (إن وُجدت)
+     2) مؤقت الفئة المعرفية المُعدّ من قبل المشرف (category_timers)
+     3) القيمة الافتراضية العامة في js/config.js */
+  async function resolveQuestionTimer({ age, category } = {}){
+    if (age != null){
+      const ageSettings = await getAgeTimerSettings();
+      const match = ageSettings.find(s => age >= s.min_age && age <= s.max_age);
+      if (match) return match.time_seconds;
+    }
+    if (category){
+      const categoryTimers = await getCategoryTimers();
+      if (categoryTimers[category]) return categoryTimers[category];
+    }
+    return QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
+  }
+
+  /* ================= QUIZ BEHAVIOR SETTINGS (تحكم المشرف بالعشوائية) ================= */
+  const DEFAULT_QUIZ_SETTINGS = {
+    shuffleQuestions: true,     // خلط ترتيب الأسئلة المختارة لكل اختبار
+    shuffleAnswers: true,       // خلط ترتيب الخيارات الأربعة في كل عرض للسؤال
+    preventRepetition: true,    // تجنّب الأسئلة التي أُجيب عنها مؤخرًا كلما توفر عدد كافٍ
+    randomGeneration: true,     // المفتاح الرئيسي: عند إيقافه يصبح كل اختبار ثابتًا للجميع
+  };
+
+  async function getQuizSettings(){
+    if (demoMode) return { ...DEFAULT_QUIZ_SETTINGS, ...lsGet(LS_KEYS.quizSettings, {}) };
+    const { data, error } = await client.from("app_settings").select("value").eq("key", "quiz_settings").maybeSingle();
+    if (error || !data) return { ...DEFAULT_QUIZ_SETTINGS };
+    return { ...DEFAULT_QUIZ_SETTINGS, ...(data.value || {}) };
+  }
+
+  async function saveQuizSettings(settings){
+    const merged = { ...DEFAULT_QUIZ_SETTINGS, ...settings };
+    if (demoMode){ lsSet(LS_KEYS.quizSettings, merged); return merged; }
+    const { error } = await client.from("app_settings").upsert({ key: "quiz_settings", value: merged });
+    if (error) throw error;
+    return merged;
+  }
+
+  /* ================= QUESTIONS ================= */
+  async function getQuestions({ category, ageMin, ageMax, difficulty, limit, excludeIds } = {}){
+    const settings = await getQuizSettings();
+
+    let all;
+    if (demoMode){
+      all = ensureDemoQuestions();
+      if (category) all = all.filter(q => q.category === category);
+      if (difficulty) all = all.filter(q => q.difficulty === difficulty);
+      if (ageMin != null) all = all.filter(q => q.age_max >= ageMin);
+      if (ageMax != null) all = all.filter(q => q.age_min <= ageMax);
+    } else {
+      // نُصفّي الفئة/المستوى/العمر مباشرة عبر الاستعلام قبل الجلب لتبقى الاستعلامات سريعة
+      // حتى مع آلاف الأسئلة، ثم نطبّق الخلط/الاستبعاد على النتيجة المُصفّاة فقط
+      let query = client.from("questions").select("*");
+      if (category) query = query.eq("category", category);
+      if (difficulty) query = query.eq("difficulty", difficulty);
+      if (ageMin != null) query = query.gte("age_max", ageMin);
+      if (ageMax != null) query = query.lte("age_min", ageMax);
+      const { data, error } = await query;
+      if (error){ console.error(error); return []; }
+      all = data || [];
+    }
+
+    if (!settings.randomGeneration){
+      // وضع ثابت غير عشوائي بالكامل: نفس الترتيب لكل اللاعبين، بدون استبعاد أسئلة سابقة
+      return limit ? all.slice(0, limit) : all;
+    }
+
+    // منع تكرار الأسئلة المُجابة مؤخرًا — فقط إن بقي عدد كافٍ من الأسئلة لتلبية الطلب
+    if (settings.preventRepetition && excludeIds && excludeIds.length){
+      const filtered = all.filter(q => !excludeIds.includes(q.id));
+      if (filtered.length >= (limit || 1)) all = filtered;
+    }
+
+    if (settings.shuffleQuestions) all = shuffle(all.slice());
+
+    return limit ? all.slice(0, limit) : all;
+  }
+
+  async function saveQuestion(q){
+    if (demoMode){
+      let all = ensureDemoQuestions();
+      if (q.id){
+        all = all.map(item => item.id === q.id ? { ...item, ...q } : item);
+      } else {
+        q.id = "demo-" + Date.now();
+        all.push(q);
+      }
+      lsSet(LS_KEYS.questions, all);
+      return q;
+    }
+    if (q.id && !String(q.id).startsWith("demo-")){
+      const { data, error } = await client.from("questions").update(q).eq("id", q.id).select().single();
+      if (error) throw error;
+      return data;
+    }
+    delete q.id;
+    const { data, error } = await client.from("questions").insert(q).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function deleteQuestion(id){
+    if (demoMode){
+      let all = ensureDemoQuestions().filter(q => q.id !== id);
+      lsSet(LS_KEYS.questions, all);
+      return true;
+    }
+    const { error } = await client.from("questions").delete().eq("id", id);
+    if (error) throw error;
+    return true;
+  }
+
+  /* ================= LEADERBOARD ================= */
+  /* لوحة المتصدرين العالمية: كل اللاعبين مرتّبين تنازليًا حسب إجمالي النقاط.
+     تُعاد القائمة كاملة (غير مقصوصة) ليتمكن الاستدعاء من حساب ترتيب اللاعب
+     الحالي بدقة حتى لو لم يكن ضمن أعلى اللاعبين المعروضين في الواجهة. */
+  async function getLeaderboard(){
+    const profiles = await listAllProfiles();
+    return profiles
+      .slice()
+      .sort((a, b) => (b.total_score || 0) - (a.total_score || 0))
+      .map((p, i) => ({ ...p, rank: i + 1 }));
+  }
+
+  /* ================= GAMES (multiplayer) ================= */
+  async function getGames(){
+    if (demoMode) return lsGet(LS_KEYS.games, []);
+    const { data, error } = await client.from("games").select("*").order("start_time", { ascending: true });
+    if (error){ console.error(error); return []; }
+    return data;
+  }
+
+  async function saveGame(g){
+    if (demoMode){
+      let all = lsGet(LS_KEYS.games, []);
+      if (g.id){
+        all = all.map(item => item.id === g.id ? { ...item, ...g } : item);
+      } else {
+        g.id = "game-" + Date.now();
+        g.status = g.status || "waiting";
+        all.push(g);
+      }
+      lsSet(LS_KEYS.games, all);
+      return g;
+    }
+    if (g.id){
+      const { data, error } = await client.from("games").update(g).eq("id", g.id).select().single();
+      if (error) throw error;
+      return data;
+    }
+    const { data, error } = await client.from("games").insert(g).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function deleteGame(id){
+    if (demoMode){
+      let all = lsGet(LS_KEYS.games, []).filter(g => g.id !== id);
+      lsSet(LS_KEYS.games, all);
+      const players = lsGet(LS_KEYS.players, {});
+      delete players[id];
+      lsSet(LS_KEYS.players, players);
+      return true;
+    }
+    const { error } = await client.from("games").delete().eq("id", id);
+    if (error) throw error;
+    return true;
+  }
+
+  async function joinGame(gameId, player){
+    if (demoMode){
+      const players = lsGet(LS_KEYS.players, {});
+      players[gameId] = players[gameId] || [];
+      players[gameId].push(player);
+      lsSet(LS_KEYS.players, players);
+      return players[gameId];
+    }
+    const { data, error } = await client.from("game_players").insert({ game_id: gameId, ...player }).select();
+    if (error) throw error;
+    return data;
+  }
+
+  async function getGamePlayers(gameId){
+    if (demoMode){
+      const players = lsGet(LS_KEYS.players, {});
+      return players[gameId] || [];
+    }
+    const { data, error } = await client.from("game_players").select("*").eq("game_id", gameId);
+    if (error){ console.error(error); return []; }
+    return data;
+  }
+
+  /* realtime channel subscription (no-op safe wrapper for demo mode) */
+  function subscribeToGame(gameId, onChange){
+    if (demoMode){
+      const interval = setInterval(() => onChange({ polling: true }), 2000);
+      return { unsubscribe: () => clearInterval(interval) };
+    }
+    const channel = client.channel("game-" + gameId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` }, onChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "games", filter: `id=eq.${gameId}` }, onChange)
+      .subscribe();
+    return channel;
+  }
+
+  function unsubscribe(channel){
+    if (!channel) return;
+    if (channel.unsubscribe) channel.unsubscribe();
+    else if (client) client.removeChannel(channel);
+  }
+
+  /* ================= admin auth (حساب مشرف واحد ثابت، بلا بريد إلكتروني ولا Supabase Auth) ================= */
+  /* ================= admin auth (حساب مشرف واحد محمي في قاعدة البيانات — بدون أي بيانات دخول
+     مكتوبة في كود JavaScript). آلية التمهيد الذاتي: أول محاولة تسجيل دخول تُنشئ حساب المشرف
+     الوحيد تلقائيًا بالاسم وكلمة المرور المُدخَلين، وتُغلق الباب أمام أي محاولة إنشاء حساب
+     مشرف آخر بعد ذلك — راجع bootstrap_admin في sql/schema.sql. ================= */
+  async function adminLogin(username, password){
+    username = (username || "").trim();
+    if (!username || !password) throw new Error("الرجاء تعبئة جميع الحقول");
+    const passwordHash = simpleHash(password);
+
+    if (demoMode){
+      const accounts = lsGet(LS_KEYS.adminAccounts, {});
+      if (Object.keys(accounts).length === 0){
+        // لا يوجد مشرف مسجّل بعد في هذا المتصفح: هذه المحاولة الأولى تُنشئ الحساب تلقائيًا
+        accounts[username.toLowerCase()] = { username, passwordHash };
+        lsSet(LS_KEYS.adminAccounts, accounts);
+        return { username, bootstrapped: true };
+      }
+      const acc = accounts[username.toLowerCase()];
+      if (!acc || acc.passwordHash !== passwordHash){
+        throw new Error("بيانات الدخول غير صحيحة، أو الحساب لا يملك صلاحية المشرف.");
+      }
+      return { username };
+    }
+
+    const { data: valid, error: verifyErr } = await client.rpc("verify_admin_login", {
+      p_username: username, p_password_hash: passwordHash,
+    });
+    if (!verifyErr && valid) return { username };
+
+    // لا يوجد تطابق — تحقق: هل هذه أول محاولة تسجيل دخول إطلاقًا (لا يوجد أي مشرف بعد)؟
+    const { data: hasAdmin, error: hasErr } = await client.rpc("has_any_admin");
+    if (!hasErr && hasAdmin === false){
+      const { data: created, error: bootErr } = await client.rpc("bootstrap_admin", {
+        p_username: username, p_password_hash: passwordHash,
+      });
+      if (!bootErr && created) return { username, bootstrapped: true };
+    }
+
+    throw new Error("بيانات الدخول غير صحيحة، أو الحساب لا يملك صلاحية المشرف.");
+  }
+
+  async function changeAdminPassword(username, oldPassword, newPassword){
+    if (newPassword.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 أحرف");
+    const oldHash = simpleHash(oldPassword);
+    const newHash = simpleHash(newPassword);
+
+    if (demoMode){
+      const accounts = lsGet(LS_KEYS.adminAccounts, {});
+      const key = username.toLowerCase();
+      if (!accounts[key] || accounts[key].passwordHash !== oldHash) throw new Error("كلمة المرور الحالية غير صحيحة");
+      accounts[key].passwordHash = newHash;
+      lsSet(LS_KEYS.adminAccounts, accounts);
+      return true;
+    }
+    const { data: ok, error } = await client.rpc("set_admin_password", {
+      p_username: username, p_old_hash: oldHash, p_new_hash: newHash,
+    });
+    if (error || !ok) throw new Error("كلمة المرور الحالية غير صحيحة");
+    return true;
+  }
+
+  /* ================= stats (admin dashboard) ================= */
+  async function getStats(){
+    const questions = demoMode ? ensureDemoQuestions() : (await client.from("questions").select("*")).data || [];
+    const profiles = await listAllProfiles();
+    const history = await getAllHistory();
+    const games = demoMode ? lsGet(LS_KEYS.games, []) : (await client.from("games").select("*")).data || [];
+
+    const catCounts = {};
+    history.forEach(h => { if (h.category) catCounts[h.category] = (catCounts[h.category] || 0) + 1; });
+    let topCategory = null, topCount = 0;
+    Object.entries(catCounts).forEach(([c, n]) => { if (n > topCount){ topCategory = c; topCount = n; } });
+
+    return {
+      totalPlayers: profiles.length,
+      totalQuizzes: history.length,
+      totalQuestions: questions.length,
+      totalGames: games.length,
+      highestScore: profiles.reduce((m, p) => Math.max(m, p.total_score || 0), 0),
+      topCategory: topCategory ? catName(topCategory) : "—",
+    };
+  }
+
+  /* ---------------- utils ---------------- */
+  function shuffle(arr){
+    for (let i = arr.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function levelForScore(score){
+    if (score >= 1000) return { name: "عبقري", emoji: "👑" };
+    if (score >= 500) return { name: "خبير", emoji: "🥇" };
+    if (score >= 100) return { name: "متعلم", emoji: "🥈" };
+    return { name: "مبتدئ", emoji: "🥉" };
+  }
+
+  return {
+    init, isConfigured,
+    get isDemoMode(){ return demoMode; },
+    get client(){ return client; },
+    get session(){ return currentSession; },
+    getCurrentUserId,
+
+    signUp, signIn, signOut, restoreSession, changePassword,
+    getProfile, updateProfile, listAllProfiles, getRank,
+    addGameHistory, getGameHistory, getAllHistory,
+    computeAchievements, syncAchievements,
+    submitQuizResult,
+
+    getQuestions, saveQuestion, deleteQuestion,
+    getLeaderboard,
+    getGames, saveGame, deleteGame, joinGame, getGamePlayers, subscribeToGame, unsubscribe,
+    canPlay, grantReplay, getQuestionCounts, saveQuestionCounts,
+    getCategoryTimers, saveCategoryTimers,
+    getAgeTimerSettings, saveAgeTimerSetting, deleteAgeTimerSetting, resolveQuestionTimer,
+    getQuizSettings, saveQuizSettings,
+    adminLogin, changeAdminPassword, getStats,
+    levelForScore, shuffle,
+  };
+})();

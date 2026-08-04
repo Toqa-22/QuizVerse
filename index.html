@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>QuizVerse | عالم الاختبارات</title>
+<meta name="description" content="منصة اختبارات تفاعلية ذكية باللغة العربية">
+
+<!-- Fonts: Amiri for cinematic display headings, Tajawal for clean Arabic UI body -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+
+<!-- Decorative playful blob background layer -->
+<div class="bg-decor" aria-hidden="true">
+  <div class="blob blob--a"></div>
+  <div class="blob blob--b"></div>
+  <div class="blob blob--c"></div>
+  <div class="blob blob--d"></div>
+</div>
+
+<!-- Top bar -->
+<header class="topbar">
+  <button class="brand" id="btn-home" aria-label="الصفحة الرئيسية">
+    <span class="brand-mark" aria-hidden="true">🏠</span>
+    <span class="brand-text">
+      <strong>QuizVerse</strong>
+      <em>عالم الاختبارات</em>
+    </span>
+  </button>
+
+  <div class="topbar-actions">
+    <div class="score-pill" id="header-score" hidden>
+      <span class="dot"></span>
+      <span id="header-score-value">0</span>
+      <span class="pill-label">نقطة</span>
+    </div>
+    <button class="icon-btn" id="btn-theme" title="تبديل المظهر" aria-label="تبديل المظهر">🌙</button>
+    <button class="icon-btn" id="btn-header-leaderboard" title="لوحة المتصدرين" aria-label="لوحة المتصدرين">🏆</button>
+  </div>
+</header>
+
+<main id="app">
+
+  <!-- ============ SCREEN: WELCOME ============ -->
+  <section class="screen screen--welcome active" id="screen-welcome">
+    <div class="hero">
+      <p class="eyebrow">✦ منصة اختبارات معرفية تفاعلية ✦</p>
+      <h1 class="hero-title">اختبر <span class="accent">معرفتك</span>،<br>واكتشف <span class="accent">عبقريتك</span></h1>
+      <p class="hero-sub">تسعة عوالم معرفية، آلاف الأسئلة، وحساب لاعب خاص بك يحفظ تقدمك وإنجازاتك.</p>
+    </div>
+
+    <div class="entry-grid">
+      <button type="button" class="entry-card entry-card--primary" id="btn-goto-register">
+        <span class="entry-icon">🆕</span>
+        <span class="entry-title">لاعب جديد</span>
+        <span class="entry-sub">أنشئ حسابك وابدأ رحلتك المعرفية</span>
+      </button>
+      <button type="button" class="entry-card" id="btn-goto-login">
+        <span class="entry-icon">🔐</span>
+        <span class="entry-title">تسجيل الدخول</span>
+        <span class="entry-sub">لديك حساب؟ ادخل من هنا</span>
+      </button>
+      <button type="button" class="entry-card entry-card--ghost" id="btn-goto-admin">
+        <span class="entry-icon">🛡️</span>
+        <span class="entry-title">دخول المشرف</span>
+        <span class="entry-sub">لوحة تحكم إدارة المنصة</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: REGISTER ============ -->
+  <section class="screen screen--register" id="screen-register">
+    <div class="screen-head" style="max-width:520px;margin-inline:auto">
+      <button class="btn-back" data-back="screen-welcome">→ رجوع</button>
+    </div>
+    <form class="glass-card welcome-card" id="form-register" novalidate>
+      <p class="eyebrow">حساب جديد</p>
+      <h2>أنشئ ملفك الشخصي 🎮</h2>
+
+      <div class="field">
+        <label for="reg-username">اسم المستخدم</label>
+        <input type="text" id="reg-username" autocomplete="username" maxlength="24" placeholder="بدون مسافات، حروف إنجليزية أو أرقام" required>
+        <span class="field-error" id="err-reg-username"></span>
+      </div>
+
+      <div class="field">
+        <label for="reg-password">كلمة المرور</label>
+        <input type="password" id="reg-password" autocomplete="new-password" minlength="6" required>
+      </div>
+      <div class="field">
+        <label for="reg-password2">تأكيد كلمة المرور</label>
+        <input type="password" id="reg-password2" autocomplete="new-password" minlength="6" required>
+        <span class="field-error" id="err-reg-password"></span>
+      </div>
+
+      <div class="field">
+        <label>الفئة العمرية</label>
+        <div class="age-grid" id="reg-age-grid" role="radiogroup" aria-label="الفئة العمرية">
+          <button type="button" class="age-chip" data-age="5-7" role="radio" aria-checked="false"><span class="age-emoji">🧒</span><span>5-7</span></button>
+          <button type="button" class="age-chip" data-age="8-10" role="radio" aria-checked="false"><span class="age-emoji">🧑</span><span>8-10</span></button>
+          <button type="button" class="age-chip" data-age="11-13" role="radio" aria-checked="false"><span class="age-emoji">🧑‍🎓</span><span>11-13</span></button>
+          <button type="button" class="age-chip" data-age="14-17" role="radio" aria-checked="false"><span class="age-emoji">🧑‍🚀</span><span>14-17</span></button>
+          <button type="button" class="age-chip" data-age="18+" role="radio" aria-checked="false"><span class="age-emoji">🧑‍💼</span><span>+18</span></button>
+        </div>
+        <span class="field-error" id="err-reg-age"></span>
+      </div>
+
+      <div class="field">
+        <label>اختر صورتك الرمزية</label>
+        <div class="avatar-grid" id="reg-avatar-grid" role="radiogroup" aria-label="الصورة الرمزية"><!-- injected --></div>
+      </div>
+
+      <span class="field-error" id="err-register"></span>
+      <button type="submit" class="btn btn-primary btn-block">
+        <span>إنشاء الحساب والبدء</span>
+      </button>
+    </form>
+  </section>
+
+  <!-- ============ SCREEN: LOGIN ============ -->
+  <section class="screen screen--login" id="screen-login">
+    <div class="screen-head" style="max-width:420px;margin-inline:auto">
+      <button class="btn-back" data-back="screen-welcome">→ رجوع</button>
+    </div>
+    <form class="glass-card welcome-card" id="form-login" novalidate>
+      <p class="eyebrow">أهلًا بعودتك</p>
+      <h2>تسجيل الدخول 🔐</h2>
+      <div class="field">
+        <label for="login-username">اسم المستخدم</label>
+        <input type="text" id="login-username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="login-password">كلمة المرور</label>
+        <input type="password" id="login-password" autocomplete="current-password" required>
+      </div>
+      <span class="field-error" id="err-login"></span>
+      <button type="submit" class="btn btn-primary btn-block">دخول</button>
+    </form>
+  </section>
+
+  <!-- ============ SCREEN: PLAYER DASHBOARD ============ -->
+  <section class="screen screen--dashboard" id="screen-dashboard">
+    <div class="dash-welcome glass-card">
+      <div class="dash-avatar" id="dash-avatar">🦁</div>
+      <div class="dash-welcome-text">
+        <p class="eyebrow" id="dash-level-badge">مبتدئ 🥉</p>
+        <h2 id="dash-greeting">أهلًا بعودتك، لاعب 👋</h2>
+        <p class="muted" id="dash-subtext">جاهز لتحدٍ جديد اليوم؟</p>
+      </div>
+      <div class="dash-welcome-actions">
+        <button class="btn btn-primary" id="btn-dash-play">🎯 العب الآن</button>
+        <button class="btn btn-ghost" id="btn-dash-profile">👤 ملفي الشخصي</button>
+      </div>
+    </div>
+
+    <div class="stats-grid dash-stats" id="dash-stats"><!-- injected --></div>
+
+    <div class="dash-columns">
+      <div class="glass-card">
+        <h3>🕒 آخر الاختبارات</h3>
+        <div class="history-list" id="dash-history"><!-- injected --></div>
+      </div>
+      <div class="glass-card">
+        <h3>🏅 الإنجازات</h3>
+        <div class="achv-grid" id="dash-achievements"><!-- injected --></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: PLAYER PROFILE ============ -->
+  <section class="screen screen--profile" id="screen-profile">
+    <div class="screen-head">
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع للوحتي</button>
+      <h2>ملفي <span class="accent">الشخصي</span></h2>
+    </div>
+
+    <div class="profile-grid">
+      <div class="glass-card profile-card">
+        <div class="avatar-grid" id="profile-avatar-grid"><!-- injected --></div>
+        <dl class="profile-facts">
+          <div><dt>اسم المستخدم</dt><dd id="profile-username">—</dd></div>
+          <div><dt>الفئة العمرية</dt><dd id="profile-age">—</dd></div>
+          <div><dt>المستوى</dt><dd id="profile-level">—</dd></div>
+          <div><dt>الترتيب</dt><dd id="profile-rank">—</dd></div>
+          <div><dt>إجمالي النقاط</dt><dd id="profile-score">—</dd></div>
+          <div><dt>الفئة المفضلة</dt><dd id="profile-favcat">—</dd></div>
+        </dl>
+      </div>
+
+      <div class="glass-card">
+        <h3>تحديث بيانات الحساب</h3>
+        <form id="form-update-profile" class="profile-form">
+          <div class="field">
+            <label for="pf-age">الفئة العمرية</label>
+            <select id="pf-age">
+              <option value="5-7">5-7</option><option value="8-10">8-10</option>
+              <option value="11-13">11-13</option><option value="14-17">14-17</option>
+              <option value="18+">+18</option>
+            </select>
+          </div>
+          <button class="btn btn-ghost btn-block" type="submit">حفظ التغييرات</button>
+          <span class="field-error" id="err-update-profile"></span>
+        </form>
+
+        <hr class="divider">
+
+        <h3>تغيير كلمة المرور</h3>
+        <form id="form-change-password" class="profile-form">
+          <div class="field"><label for="pf-newpass">كلمة المرور الجديدة</label><input type="password" id="pf-newpass" minlength="6" required></div>
+          <div class="field"><label for="pf-newpass2">تأكيد كلمة المرور</label><input type="password" id="pf-newpass2" minlength="6" required></div>
+          <span class="field-error" id="err-change-password"></span>
+          <button class="btn btn-ghost btn-block" type="submit">تحديث كلمة المرور</button>
+        </form>
+
+        <hr class="divider">
+        <button class="btn btn-ghost btn-block" id="btn-logout">🚪 تسجيل الخروج</button>
+      </div>
+    </div>
+
+    <div class="glass-card" style="margin-top:16px">
+      <h3>🏅 كل الإنجازات</h3>
+      <div class="achv-grid" id="profile-achievements"><!-- injected --></div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: CATEGORY SELECT ============ -->
+  <section class="screen screen--categories" id="screen-categories">
+    <div class="screen-head">
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع للوحتي</button>
+      <h2>أهلًا <span id="greet-name" class="accent"></span>، جهّز اختبارك</h2>
+      <p class="muted">اختر نمط اللعب، ثم المستوى، ثم الفئة المعرفية</p>
+    </div>
+
+    <div class="glass-card mode-card">
+      <h3>1️⃣ نمط اللعب</h3>
+      <div class="mode-row">
+        <button type="button" class="mode-btn active" data-mode="solo">
+          <span class="mode-icon">🎯</span>
+          <span>فردي</span>
+        </button>
+        <button type="button" class="mode-btn" data-mode="multiplayer">
+          <span class="mode-icon">👥</span>
+          <span>جماعي مباشر</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="screen-head" id="level-category-head" style="margin-top:8px">
+      <h3 style="margin:0">2️⃣ مستوى الصعوبة</h3>
+    </div>
+    <div class="glass-card difficulty-card" id="difficulty-card">
+      <div class="difficulty-row" id="difficulty-row" role="radiogroup">
+        <button type="button" class="diff-chip" data-diff="easy" role="radio" aria-checked="false">سهل</button>
+        <button type="button" class="diff-chip" data-diff="medium" role="radio" aria-checked="true">متوسط</button>
+        <button type="button" class="diff-chip" data-diff="hard" role="radio" aria-checked="false">صعب</button>
+      </div>
+    </div>
+
+    <div class="screen-head" id="category-head" style="margin-top:8px">
+      <h3 style="margin:0">3️⃣ الفئة المعرفية</h3>
+    </div>
+    <div class="category-grid" id="category-grid"><!-- injected by JS --></div>
+
+    <div class="start-quiz-bar">
+      <span class="muted" id="start-quiz-hint">اختر فئة لتفعيل زر البدء</span>
+      <button type="button" class="btn btn-primary btn-block" id="btn-start-quiz" disabled>
+        <span id="btn-start-quiz-label">ابدأ الاختبار</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: MULTIPLAYER LOBBY LIST ============ -->
+  <section class="screen screen--mp-list" id="screen-mp-list">
+    <div class="screen-head">
+      <button class="btn-back" data-back="screen-categories">→ رجوع</button>
+      <h2>الغرف <span class="accent">الجماعية</span> المتاحة</h2>
+      <p class="muted">انضم لغرفة قائمة أو انتظر بدء المضيف</p>
+    </div>
+    <div class="mp-list" id="mp-list"><!-- injected --></div>
+  </section>
+
+  <!-- ============ SCREEN: MULTIPLAYER WAITING ROOM ============ -->
+  <section class="screen screen--mp-room" id="screen-mp-room">
+    <div class="glass-card mp-room-card">
+      <p class="eyebrow">غرفة الانتظار</p>
+      <h2 id="mp-room-title">—</h2>
+      <p class="muted" id="mp-room-desc"></p>
+
+      <div class="mp-room-stats">
+        <div><strong id="mp-room-count">0</strong><span>لاعب منضم</span></div>
+        <div><strong id="mp-room-max">0</strong><span>الحد الأقصى</span></div>
+      </div>
+
+      <ul class="mp-players" id="mp-players"></ul>
+
+      <div class="mp-waiting-indicator">
+        <span class="dot-pulse"></span>
+        <span id="mp-waiting-text">بانتظار بدء المضيف...</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: QUIZ ============ -->
+  <section class="screen screen--quiz" id="screen-quiz">
+    <div class="quiz-topbar">
+      <div class="quiz-progress">
+        <span id="q-counter">1 / 10</span>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+      <div class="timer-ring" id="timer-ring">
+        <svg viewBox="0 0 60 60">
+          <circle cx="30" cy="30" r="26" class="timer-track"/>
+          <circle cx="30" cy="30" r="26" class="timer-arc" id="timer-arc"/>
+        </svg>
+        <span id="timer-value">15</span>
+      </div>
+    </div>
+
+    <div class="glass-card question-card">
+      <p class="q-meta"><span id="q-category-badge"></span></p>
+      <h2 class="q-text" id="q-text">نص السؤال هنا</h2>
+      <div class="options-grid" id="options-grid"><!-- injected --></div>
+      <button type="button" class="btn btn-primary btn-block btn-check-answer" id="btn-check-answer" hidden>تحقق من الإجابة</button>
+    </div>
+
+    <div class="feedback-panel" id="feedback-panel" hidden>
+      <div class="feedback-icon" id="feedback-icon">✔</div>
+      <h3 id="feedback-title">إجابة صحيحة!</h3>
+      <p id="feedback-explain" class="muted"></p>
+      <button class="btn btn-primary" id="btn-next-question">السؤال التالي ←</button>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: RESULTS ============ -->
+  <section class="screen screen--results" id="screen-results">
+    <div class="glass-card results-card">
+      <div class="results-badge-wrap">
+        <span class="badge-ring"></span>
+        <span class="results-emoji" id="results-emoji">🥇</span>
+      </div>
+      <p class="eyebrow">انتهى الاختبار</p>
+      <h2 id="results-level">خبير</h2>
+      <div class="results-score">
+        <strong id="results-score-value">0</strong>
+        <span>نقطة</span>
+      </div>
+      <div class="results-stats">
+        <div><strong id="results-correct">0</strong><span>إجابات صحيحة</span></div>
+        <div><strong id="results-wrong">0</strong><span>إجابات خاطئة</span></div>
+        <div><strong id="results-time">0s</strong><span>متوسط الوقت</span></div>
+      </div>
+      <div class="results-actions">
+        <button class="btn btn-primary" id="btn-retry">حاول مجددًا</button>
+        <button class="btn btn-ghost" id="btn-to-categories">فئة أخرى</button>
+        <button class="btn btn-ghost" id="btn-to-leaderboard">لوحة المتصدرين</button>
+        <button class="btn btn-ghost" id="btn-to-dashboard">لوحتي</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: LEADERBOARD ============ -->
+  <section class="screen screen--leaderboard" id="screen-leaderboard">
+    <div class="screen-head">
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع</button>
+      <h2>🏆 لوحة <span class="accent">المتصدرين العالمية</span></h2>
+      <p class="muted">ترتيب كل اللاعبين حسب إجمالي النقاط</p>
+    </div>
+
+    <!-- بطاقة "ترتيبك" — تظهر فقط إذا لم يكن اللاعب ضمن القائمة المعروضة أعلاه -->
+    <div class="glass-card lb-my-rank-card" id="lb-my-rank-card" hidden>
+      <p class="lb-my-rank-label">ترتيبك</p>
+      <div class="lb-row lb-row--me" id="lb-my-rank-row"><!-- injected --></div>
+    </div>
+
+    <div class="glass-card lb-card">
+      <ol class="lb-list" id="lb-list"><!-- injected --></ol>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: ADMIN LOGIN ============ -->
+  <section class="screen screen--admin-login" id="screen-admin-login">
+    <div class="screen-head" style="max-width:420px;margin-inline:auto">
+      <button class="btn-back" data-back="screen-welcome">→ رجوع</button>
+    </div>
+    <form class="glass-card admin-login-card" id="form-admin-login">
+      <p class="eyebrow">دخول المشرف</p>
+      <h2>لوحة التحكم</h2>
+      <div class="field">
+        <label for="admin-username">اسم المستخدم</label>
+        <input type="text" id="admin-username" required autocomplete="username" placeholder="admin">
+      </div>
+      <div class="field">
+        <label for="admin-pass">كلمة المرور</label>
+        <input type="password" id="admin-pass" required autocomplete="current-password">
+      </div>
+      <span class="field-error" id="admin-login-err"></span>
+      <button class="btn btn-primary btn-block" type="submit">تسجيل الدخول</button>
+    </form>
+  </section>
+
+  <!-- ============ SCREEN: ADMIN DASHBOARD ============ -->
+  <section class="screen screen--admin" id="screen-admin">
+    <div class="admin-shell">
+      <aside class="admin-nav">
+        <button class="admin-nav-btn active" data-panel="panel-stats">📊 الإحصائيات</button>
+        <button class="admin-nav-btn" data-panel="panel-questions">📝 الأسئلة</button>
+        <button class="admin-nav-btn" data-panel="panel-settings">🎚️ إعدادات الاختبار</button>
+        <button class="admin-nav-btn" data-panel="panel-age-timers">⏱️ مؤقت الأعمار</button>
+        <button class="admin-nav-btn" data-panel="panel-players">👤 اللاعبون</button>
+        <button class="admin-nav-btn" data-panel="panel-games">🎮 الغرف الجماعية</button>
+        <button class="admin-nav-btn" id="btn-admin-logout">🚪 خروج</button>
+      </aside>
+
+      <div class="admin-content">
+        <!-- Stats -->
+        <div class="admin-panel active" id="panel-stats">
+          <h2>نظرة عامة</h2>
+          <div class="stats-grid" id="stats-grid"><!-- injected --></div>
+          <div class="glass-card">
+            <h3>الفئة الأكثر شعبية</h3>
+            <div id="stats-top-category" class="muted">—</div>
+          </div>
+        </div>
+
+        <!-- Questions -->
+        <div class="admin-panel" id="panel-questions">
+          <div class="admin-panel-head">
+            <h2>إدارة الأسئلة</h2>
+            <button class="btn btn-primary" id="btn-new-question">+ سؤال جديد</button>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table" id="questions-table">
+              <thead>
+                <tr>
+                  <th>السؤال</th><th>النوع</th><th>الفئة</th><th>العمر</th><th>الصعوبة</th><th>النقاط</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="questions-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Settings: questions per category -->
+        <div class="admin-panel" id="panel-settings">
+          <div class="admin-panel-head">
+            <h2>إعدادات عشوائية الاختبار</h2>
+            <button class="btn btn-primary" id="btn-save-settings">حفظ الإعدادات</button>
+          </div>
+
+          <div class="glass-card" style="margin-bottom:18px">
+            <div class="toggle-row">
+              <label class="toggle-switch">
+                <input type="checkbox" id="chk-shuffle-questions" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <div>
+                <strong>خلط الأسئلة (Shuffle Questions)</strong>
+                <p class="muted">اختيار مجموعة أسئلة مختلفة وبترتيب مختلف لكل لاعب من بين كل الأسئلة المطابقة للفئة والعمر والمستوى.</p>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle-switch">
+                <input type="checkbox" id="chk-shuffle-answers" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <div>
+                <strong>خلط ترتيب الخيارات (Shuffle Answer Choices)</strong>
+                <p class="muted">تغيير موضع الإجابة الصحيحة بين الخيارات الأربعة في كل مرة يُعرض فيها السؤال.</p>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle-switch">
+                <input type="checkbox" id="chk-prevent-repeat" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <div>
+                <strong>منع تكرار الأسئلة (Prevent Question Repetition)</strong>
+                <p class="muted">تجنّب إظهار الأسئلة التي أجاب عنها اللاعب مؤخرًا لنفس الفئة والمستوى، طالما بقي عدد كافٍ من الأسئلة الأخرى.</p>
+              </div>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle-switch">
+                <input type="checkbox" id="chk-random-generation" checked>
+                <span class="toggle-slider"></span>
+              </label>
+              <div>
+                <strong>التوليد العشوائي للاختبار (Random Quiz Generation)</strong>
+                <p class="muted">المفتاح الرئيسي لكل ما سبق. عند إيقافه، يحصل جميع اللاعبين على نفس الأسئلة بنفس الترتيب الثابت دائمًا.</p>
+              </div>
+            </div>
+          </div>
+
+          <h2>عدد الأسئلة والمؤقت لكل فئة</h2>
+          <p class="muted">حدّد عدد الأسئلة، ومدة المؤقت بالثواني لكل سؤال، بشكل مستقل لكل فئة. عند انتهاء الوقت يُحتسب السؤال الحالي تلقائيًا كإجابة خاطئة وينتقل الاختبار للسؤال التالي.</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="settings-table">
+              <thead><tr><th>الفئة</th><th style="width:160px">عدد الأسئلة</th><th style="width:160px">المؤقت (ثانية)</th></tr></thead>
+              <tbody id="settings-tbody"></tbody>
+            </table>
+          </div>
+
+          <hr class="divider">
+
+          <h2>🔐 حساب المشرف</h2>
+          <p class="muted">حسابك محفوظ بشكل آمن في قاعدة البيانات، ولا توجد أي بيانات دخول مكتوبة داخل كود الموقع.</p>
+          <form id="form-admin-password" class="profile-form" style="max-width:420px">
+            <div class="field"><label for="af-old-pass">كلمة المرور الحالية</label><input type="password" id="af-old-pass" required autocomplete="current-password"></div>
+            <div class="field"><label for="af-new-pass">كلمة المرور الجديدة</label><input type="password" id="af-new-pass" required minlength="6" autocomplete="new-password"></div>
+            <div class="field"><label for="af-new-pass2">تأكيد كلمة المرور الجديدة</label><input type="password" id="af-new-pass2" required minlength="6" autocomplete="new-password"></div>
+            <span class="field-error" id="af-err"></span>
+            <button class="btn btn-ghost btn-block" type="submit">تحديث كلمة المرور</button>
+          </form>
+        </div>
+
+        <!-- Age-based timer settings -->
+        <div class="admin-panel" id="panel-age-timers">
+          <div class="admin-panel-head">
+            <h2>⏱️ مؤقت الأسئلة حسب العمر</h2>
+            <button class="btn btn-primary" id="btn-new-age-timer">+ فئة عمرية جديدة</button>
+          </div>
+          <p class="muted">حدّد وقت الإجابة بالثواني لكل فئة عمرية. عند بدء اختبار فردي، يُطبَّق تلقائيًا مؤقت الفئة العمرية المطابقة لعمر اللاعب على كل الأسئلة — بغض النظر عن نوعها (اختيار من متعدد، صح/خطأ، مطابقة، أو ترتيب). إن لم توجد فئة عمرية مطابقة، يُستخدم مؤقت الفئة المعرفية كخيار احتياطي، ثم المؤقت الافتراضي العام.</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="age-timers-table">
+              <thead><tr><th>الفئة العمرية</th><th style="width:160px">الوقت (ثانية)</th><th></th></tr></thead>
+              <tbody id="age-timers-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Players: replay grants -->
+        <div class="admin-panel" id="panel-players">
+          <div class="admin-panel-head">
+            <h2>إدارة اللاعبين</h2>
+          </div>
+          <p class="muted">كل لاعب يستطيع لعب كل فئة/مستوى مرة واحدة فقط تلقائيًا. لمنح محاولة إضافية لفئة ومستوى معيّنين، اختر اللاعب أدناه.</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="players-table">
+              <thead><tr><th>اللاعب</th><th>النقاط</th><th>الاختبارات</th><th>منح محاولة إضافية</th></tr></thead>
+              <tbody id="players-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Games -->
+        <div class="admin-panel" id="panel-games">
+          <div class="admin-panel-head">
+            <h2>الغرف الجماعية</h2>
+            <button class="btn btn-primary" id="btn-new-game">+ غرفة جديدة</button>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table" id="games-table">
+              <thead>
+                <tr><th>العنوان</th><th>الفئة</th><th>اللاعبون</th><th>الحالة</th><th></th></tr>
+              </thead>
+              <tbody id="games-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ MODAL: QUESTION EDITOR ============ -->
+<div class="modal-overlay" id="modal-question" hidden>
+  <form class="glass-card modal-card" id="form-question">
+    <h3 id="question-modal-title">سؤال جديد</h3>
+    <input type="hidden" id="qf-id">
+    <div class="field"><label>نص السؤال</label><textarea id="qf-text" required></textarea></div>
+
+    <div class="field">
+      <label>نوع السؤال</label>
+      <select id="qf-type">
+        <option value="multiple_choice">اختيار من متعدد</option>
+        <option value="true_false">صح / خطأ</option>
+        <option value="matching">مطابقة</option>
+        <option value="ordering">ترتيب</option>
+      </select>
+    </div>
+
+    <!-- اختيار من متعدد -->
+    <div id="qf-group-mc">
+      <div class="field-grid">
+        <div class="field"><label>الخيار 1</label><input id="qf-opt1"></div>
+        <div class="field"><label>الخيار 2</label><input id="qf-opt2"></div>
+        <div class="field"><label>الخيار 3</label><input id="qf-opt3"></div>
+        <div class="field"><label>الخيار 4</label><input id="qf-opt4"></div>
+      </div>
+      <div class="field">
+        <label>الإجابة الصحيحة</label>
+        <select id="qf-correct">
+          <option value="1">الخيار 1</option><option value="2">الخيار 2</option>
+          <option value="3">الخيار 3</option><option value="4">الخيار 4</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- صح / خطأ -->
+    <div id="qf-group-tf" hidden>
+      <div class="field">
+        <label>الإجابة الصحيحة</label>
+        <div class="tf-radio-row">
+          <label class="tf-radio"><input type="radio" name="qf-tf" value="1" checked> ✔ صح</label>
+          <label class="tf-radio"><input type="radio" name="qf-tf" value="2"> ✖ خطأ</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- مطابقة -->
+    <div id="qf-group-matching" hidden>
+      <div class="field">
+        <label>أزواج المطابقة (عنصر ← الإجابة الصحيحة له)</label>
+        <div id="qf-pairs-list"><!-- صفوف الأزواج تُضاف هنا ديناميكيًا --></div>
+        <button type="button" class="btn btn-ghost btn-block" id="btn-add-pair">+ إضافة زوج</button>
+        <span class="field-error" id="qf-pairs-err"></span>
+      </div>
+    </div>
+
+    <!-- ترتيب -->
+    <div id="qf-group-ordering" hidden>
+      <div class="field">
+        <label>العناصر بالترتيب الصحيح (من الأول إلى الأخير)</label>
+        <div id="qf-items-list"><!-- صفوف العناصر تُضاف هنا ديناميكيًا --></div>
+        <button type="button" class="btn btn-ghost btn-block" id="btn-add-item">+ إضافة عنصر</button>
+        <span class="field-error" id="qf-items-err"></span>
+      </div>
+    </div>
+
+    <div class="field-grid">
+      <div class="field"><label>الفئة</label>
+        <select id="qf-category"></select>
+      </div>
+      <div class="field"><label>الصعوبة</label>
+        <select id="qf-difficulty"><option value="easy">سهل</option><option value="medium">متوسط</option><option value="hard">صعب</option></select>
+      </div>
+    </div>
+    <div class="field-grid">
+      <div class="field"><label>العمر الأدنى</label><input type="number" id="qf-age-min" value="5" required></div>
+      <div class="field"><label>العمر الأقصى</label><input type="number" id="qf-age-max" value="99" required></div>
+      <div class="field"><label>النقاط</label><input type="number" id="qf-points" value="10" required></div>
+    </div>
+    <div class="field"><label>الشرح (يظهر بعد الإجابة)</label><textarea id="qf-explain"></textarea></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-cancel-question">إلغاء</button>
+      <button type="submit" class="btn btn-primary">حفظ</button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ MODAL: GAME EDITOR ============ -->
+<div class="modal-overlay" id="modal-game" hidden>
+  <form class="glass-card modal-card" id="form-game">
+    <h3>غرفة جماعية جديدة</h3>
+    <div class="field"><label>عنوان الغرفة</label><input id="gf-title" required></div>
+    <div class="field"><label>الوصف</label><textarea id="gf-desc"></textarea></div>
+    <div class="field-grid">
+      <div class="field"><label>الفئة</label><select id="gf-category"></select></div>
+      <div class="field"><label>عدد الأسئلة</label><input type="number" id="gf-qcount" value="10" required></div>
+    </div>
+
+    <div class="field">
+      <label>وضع المؤقت</label>
+      <div class="tf-radio-row">
+        <label class="tf-radio"><input type="radio" name="gf-timer-mode" value="custom" checked> ⏱️ وقت مخصص</label>
+        <label class="tf-radio"><input type="radio" name="gf-timer-mode" value="age_based"> 🎂 حسب العمر</label>
+      </div>
+      <p class="muted" style="margin:6px 0 0">في وضع "حسب العمر"، يستخدم كل لاعب مؤقته الخاص بحسب عمره (المُعدّ من ⏱️ مؤقت الأعمار)، بينما تبقى الأسئلة نفسها للجميع.</p>
+    </div>
+
+    <div class="field-grid">
+      <div class="field" id="gf-time-group"><label>الوقت لكل سؤال (ثانية)</label><input type="number" id="gf-time" value="15"></div>
+      <div class="field"><label>الحد الأقصى للاعبين</label><input type="number" id="gf-maxplayers" value="20" required></div>
+    </div>
+    <div class="field-grid">
+      <div class="field"><label>العمر الأدنى</label><input type="number" id="gf-age-min" value="5" required></div>
+      <div class="field"><label>العمر الأقصى</label><input type="number" id="gf-age-max" value="99" required></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-cancel-game">إلغاء</button>
+      <button type="submit" class="btn btn-primary">إنشاء الغرفة</button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ MODAL: AGE-BASED TIMER SETTING ============ -->
+<div class="modal-overlay" id="modal-age-timer" hidden>
+  <form class="glass-card modal-card" id="form-age-timer">
+    <h3 id="age-timer-modal-title">فئة عمرية جديدة</h3>
+    <input type="hidden" id="atf-id">
+    <div class="field-grid">
+      <div class="field"><label>العمر الأدنى</label><input type="number" id="atf-min-age" min="0" required></div>
+      <div class="field"><label>العمر الأقصى</label><input type="number" id="atf-max-age" min="0" required></div>
+    </div>
+    <div class="field"><label>الوقت لكل سؤال (ثانية)</label><input type="number" id="atf-seconds" min="1" required></div>
+    <span class="field-error" id="atf-err"></span>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-cancel-age-timer">إلغاء</button>
+      <button type="submit" class="btn btn-primary">حفظ</button>
+    </div>
+  </form>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" hidden></div>
+
+<!-- Confetti canvas -->
+<canvas id="confetti-canvas"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+<script src="js/config.js" defer></script>
+<script src="js/quiz-data.js" defer></script>
+<script src="js/supabase-client.js" defer></script>
+<script src="js/sound.js" defer></script>
+<script src="js/quiz-engine.js" defer></script>
+<script src="js/leaderboard.js" defer></script>
+<script src="js/multiplayer.js" defer></script>
+<script src="js/admin.js" defer></script>
+<script src="js/app.js" defer></script>
+</body>
+</html>
