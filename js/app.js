@@ -25,7 +25,7 @@ function goTo(screenId){
 /* شاشات تتطلب تسجيل دخول اللاعب أولًا */
 const PLAYER_ONLY_SCREENS = new Set([
   "screen-categories", "screen-mp-list", "screen-mp-room", "screen-quiz",
-  "screen-results", "screen-dashboard", "screen-profile", "screen-leaderboard",
+  "screen-results", "screen-dashboard", "screen-profile", "screen-leaderboard", "screen-room-rankings",
 ]);
 
 function guardedGoTo(screenId){
@@ -291,9 +291,10 @@ function renderAchievements(containerId, profile, rank){
   const list = QV.computeAchievements(profile, rank);
   const el = document.getElementById(containerId);
   el.innerHTML = list.map(a => `
-    <div class="achv-badge ${a.unlocked ? "unlocked" : "locked"}" title="${escapeHtml(a.desc)}">
+    <div class="achv-badge ${a.unlocked ? "unlocked" : "locked"}">
       <span class="achv-icon">${a.unlocked ? a.icon : "🔒"}</span>
       <span class="achv-name">${escapeHtml(a.name)}</span>
+      <p class="achv-desc">${escapeHtml(a.desc)}</p>
     </div>
   `).join("");
 }
@@ -531,6 +532,11 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
     AppState.profile = profile;
     updateHeaderScore();
     updateStartQuizButtonState();
+    if (isMultiplayer && gameId){
+      // نحدّث نتيجة اللاعب داخل صف الغرفة نفسها لتنعكس فورًا في ترتيب
+      // أفضل 3 لاعبين وفي شاشة "ترتيب الغرف" العامة
+      QV.updateGamePlayerScore(gameId, AppState.profile.id, result.score).catch(() => {});
+    }
     if (newlyUnlocked && newlyUnlocked.length){
       const names = newlyUnlocked.map(id => (QUIZVERSE_ACHIEVEMENTS.find(a => a.id === id) || {}).name).filter(Boolean);
       if (names.length) setTimeout(() => showToast("إنجاز جديد مفتوح: " + names.join("، ") + " 🏅"), 1200);
@@ -560,6 +566,10 @@ function initHeader(){
     else goTo("screen-welcome");
   });
   document.getElementById("btn-theme").addEventListener("click", toggleTheme);
+  document.getElementById("btn-header-room-rankings").addEventListener("click", async () => {
+    guardedGoTo("screen-room-rankings");
+    await Multiplayer.renderRoomRankingsScreen();
+  });
   document.getElementById("btn-header-leaderboard").addEventListener("click", async () => {
     guardedGoTo("screen-leaderboard");
     await Leaderboard.render();
