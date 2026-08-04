@@ -382,15 +382,31 @@ const Admin = (function(){
   }
 
   /* ---------------- settings: questions per category + timer per category + quiz behavior toggles ---------------- */
+  const QUESTION_TYPE_LABELS = {
+    multiple_choice: "اختيار من متعدد",
+    true_false: "صح / خطأ",
+    matching: "مطابقة (توصيل)",
+    ordering: "ترتيب",
+  };
+  const QUESTION_TYPE_ORDER = ["multiple_choice", "true_false", "matching", "ordering"];
+
   async function renderSettingsTable(){
-    const [counts, quizSettings, timers] = await Promise.all([
-      QV.getQuestionCounts(), QV.getQuizSettings(), QV.getCategoryTimers(),
+    const [counts, quizSettings, timers, typeTimers] = await Promise.all([
+      QV.getQuestionCounts(), QV.getQuizSettings(), QV.getCategoryTimers(), QV.getQuestionTypeTimers(),
     ]);
 
     document.getElementById("chk-shuffle-questions").checked = quizSettings.shuffleQuestions !== false;
     document.getElementById("chk-shuffle-answers").checked = quizSettings.shuffleAnswers !== false;
     document.getElementById("chk-prevent-repeat").checked = quizSettings.preventRepetition !== false;
     document.getElementById("chk-random-generation").checked = quizSettings.randomGeneration !== false;
+
+    const typeTbody = document.getElementById("type-timers-tbody");
+    typeTbody.innerHTML = QUESTION_TYPE_ORDER.map(t => `
+      <tr>
+        <td data-label="نوع السؤال">${QUESTION_TYPE_LABELS[t]}</td>
+        <td data-label="الوقت (ثانية)"><input type="number" min="1" max="300" value="${typeTimers[t] || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION}" data-timer-type="${t}" class="admin-input"></td>
+      </tr>
+    `).join("");
 
     const tbody = document.getElementById("settings-tbody");
     tbody.innerHTML = QUIZ_CATEGORIES.map(c => `
@@ -416,8 +432,16 @@ const Admin = (function(){
       if (!Number.isFinite(n) || n < 1) hasInvalidTimer = true;
       timers[inp.dataset.timerCat] = Math.max(1, Math.floor(n) || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION);
     });
+
+    const typeTimers = {};
+    document.querySelectorAll("[data-timer-type]").forEach(inp => {
+      const n = Number(inp.value);
+      if (!Number.isFinite(n) || n < 1) hasInvalidTimer = true;
+      typeTimers[inp.dataset.timerType] = Math.max(1, Math.floor(n) || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION);
+    });
+
     if (hasInvalidTimer){
-      showToast("قيمة المؤقت يجب أن تكون ثانية واحدة على الأقل لكل فئة");
+      showToast("قيمة المؤقت يجب أن تكون ثانية واحدة على الأقل");
       return;
     }
 
@@ -431,6 +455,7 @@ const Admin = (function(){
       await Promise.all([
         QV.saveQuestionCounts(counts),
         QV.saveCategoryTimers(timers),
+        QV.saveQuestionTypeTimers(typeTimers),
         QV.saveQuizSettings(quizSettings),
       ]);
       showToast("تم حفظ إعدادات الاختبار ✔");
@@ -523,9 +548,18 @@ const Admin = (function(){
     const diffLabel = { easy: "سهل", medium: "متوسط", hard: "صعب" };
     const catOptions = QUIZ_CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join("");
 
-    tbody.innerHTML = profiles.length ? profiles.map(p => `
+    tbody.innerHTML = profiles.length ? profiles.map(p => {
+      const answered = p.total_questions_answered || 0;
+      const correct = p.correct_answers || 0;
+      const wrong = p.wrong_answers || 0;
+      const accuracy = answered > 0 ? Math.round((correct / answered) * 100) : 0;
+      return `
       <tr>
         <td data-label="اللاعب">${p.avatar || ""} ${escapeHtml(p.username)}</td>
+        <td data-label="الأسئلة المحلولة">${answered}</td>
+        <td data-label="إجابات صحيحة">${correct}</td>
+        <td data-label="إجابات خاطئة">${wrong}</td>
+        <td data-label="نسبة الصحة">${accuracy}%</td>
         <td data-label="النقاط">${p.total_score || 0}</td>
         <td data-label="الاختبارات">${p.games_played || 0}</td>
         <td data-label="منح محاولة إضافية">
@@ -540,7 +574,8 @@ const Admin = (function(){
           </div>
         </td>
       </tr>
-    `).join("") : `<tr><td colspan="4" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون مسجّلون بعد</td></tr>`;
+    `;
+    }).join("") : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون مسجّلون بعد</td></tr>`;
 
     tbody.querySelectorAll("[data-grant-btn]").forEach(btn => {
       btn.addEventListener("click", async () => {
