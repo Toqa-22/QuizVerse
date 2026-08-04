@@ -40,6 +40,7 @@
       <span class="pill-label">نقطة</span>
     </div>
     <button class="icon-btn" id="btn-theme" title="تبديل المظهر" aria-label="تبديل المظهر">🌙</button>
+    <button class="icon-btn" id="btn-header-room-rankings" title="ترتيب الغرف" aria-label="ترتيب الغرف">🏅</button>
     <button class="icon-btn" id="btn-header-leaderboard" title="لوحة المتصدرين" aria-label="لوحة المتصدرين">🏆</button>
   </div>
 </header>
@@ -292,6 +293,11 @@
 
       <ul class="mp-players" id="mp-players"></ul>
 
+      <div class="mp-top3" id="mp-top3" hidden>
+        <p class="mp-top3-label">🏆 أفضل 3 لاعبين في هذه الغرفة</p>
+        <div class="mp-top3-list" id="mp-top3-list"><!-- injected --></div>
+      </div>
+
       <div class="mp-waiting-indicator">
         <span class="dot-pulse"></span>
         <span id="mp-waiting-text">بانتظار بدء المضيف...</span>
@@ -374,6 +380,16 @@
     <div class="glass-card lb-card">
       <ol class="lb-list" id="lb-list"><!-- injected --></ol>
     </div>
+  </section>
+
+  <!-- ============ SCREEN: ROOM RANKINGS (ترتيب الغرف — يبقى محفوظًا حتى يحذفه المشرف يدويًا) ============ -->
+  <section class="screen screen--room-rankings" id="screen-room-rankings">
+    <div class="screen-head">
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع</button>
+      <h2>🏅 ترتيب <span class="accent">الغرف الجماعية</span></h2>
+      <p class="muted">ترتيب كل اللاعبين داخل كل غرفة — يبقى محفوظًا حتى يحذف المشرف الغرفة يدويًا</p>
+    </div>
+    <div id="room-rankings-list"><!-- injected --></div>
   </section>
 
   <!-- ============ SCREEN: ADMIN LOGIN ============ -->
@@ -489,6 +505,17 @@
             </div>
           </div>
 
+          <h2>⏱️ وقت السؤال حسب نوعه</h2>
+          <p class="muted">حدّد مدة مستقلة بالثواني لكل نوع سؤال. عند بدء أي سؤال، يُستخدم مؤقت نوعه تلقائيًا (له الأولوية على مؤقت الفئة أو العمر)، ما يتيح مثلاً وقتًا أقصر لأسئلة صح/خطأ ووقتًا أطول لأسئلة الترتيب والمطابقة.</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="type-timers-table">
+              <thead><tr><th>نوع السؤال</th><th style="width:160px">الوقت (ثانية)</th></tr></thead>
+              <tbody id="type-timers-tbody"></tbody>
+            </table>
+          </div>
+
+          <hr class="divider">
+
           <h2>عدد الأسئلة والمؤقت لكل فئة</h2>
           <p class="muted">حدّد عدد الأسئلة، ومدة المؤقت بالثواني لكل سؤال، بشكل مستقل لكل فئة. عند انتهاء الوقت يُحتسب السؤال الحالي تلقائيًا كإجابة خاطئة وينتقل الاختبار للسؤال التالي.</p>
           <div class="table-wrap">
@@ -534,7 +561,7 @@
           <p class="muted">كل لاعب يستطيع لعب كل فئة/مستوى مرة واحدة فقط تلقائيًا. لمنح محاولة إضافية لفئة ومستوى معيّنين، اختر اللاعب أدناه.</p>
           <div class="table-wrap">
             <table class="admin-table" id="players-table">
-              <thead><tr><th>اللاعب</th><th>النقاط</th><th>الاختبارات</th><th>منح محاولة إضافية</th></tr></thead>
+              <thead><tr><th>اللاعب</th><th>الأسئلة المحلولة</th><th>إجابات صحيحة</th><th>إجابات خاطئة</th><th>نسبة الصحة</th><th>النقاط</th><th>الاختبارات</th><th>منح محاولة إضافية</th></tr></thead>
               <tbody id="players-tbody"></tbody>
             </table>
           </div>
