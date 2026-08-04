@@ -490,7 +490,54 @@ const DEMO_QUESTIONS = [
 
   // -- ترتيب (Ordering): تُخزَّن القائمة بالترتيب الصحيح في ordered_items، وتُخلط تلقائيًا عند بدء الاختبار --
   { type:"ordering", question:"رتّب الكواكب التالية من الأقرب إلى الأبعد عن الشمس.", ordered_items:["عطارد","الزهرة","الأرض","المريخ"], category:"science", age_min:8, age_max:99, difficulty:"medium", points:15, explanation:"الترتيب الصحيح بدءًا من الأقرب للشمس: عطارد، الزهرة، الأرض، ثم المريخ." },
-  { type:"ordering", question:"رتّب هذه الأحداث التاريخية الإسلامية زمنيًا من الأقدم إلى الأحدث.", ordered_items:["بعثة النبي ﷺ","الهجرة النبوية","فتح مكة","وفاة النبي ﷺ"], category:"religion", age_min:11, age_max:99, difficulty:"medium", points:20, explanation:"بدأت البعثة، ثم الهجرة إلى المدينة، ثم فتح مكة، ثم وفاة النبي ﷺ." }
+  { type:"ordering", question:"رتّب هذه الأحداث التاريخية الإسلامية زمنيًا من الأقدم إلى الأحدث.", ordered_items:["بعثة النبي ﷺ","الهجرة النبوية","فتح مكة","وفاة النبي ﷺ"], category:"religion", age_min:11, age_max:99, difficulty:"medium", points:20, explanation:"بدأت البعثة، ثم الهجرة إلى المدينة، ثم فتح مكة، ثم وفاة النبي ﷺ." },
+
+  // ==========================================
+  // ---- أنواع إضافية لفئتي القرآن الكريم وسبيستون
+  // (صح/خطأ، مطابقة، ترتيب) ----
+  // ==========================================
+
+  // -- القرآن الكريم --
+  { type:"true_false", question:"سورة الفاتحة هي أول سورة في ترتيب المصحف الشريف.", correct_answer:1, category:"quran", age_min:5, age_max:99, difficulty:"easy", points:10, explanation:"سورة الفاتحة هي السورة الأولى في ترتيب المصحف." },
+  { type:"true_false", question:"سورة البقرة هي أقصر سورة في القرآن الكريم.", correct_answer:2, category:"quran", age_min:11, age_max:99, difficulty:"medium", points:15, explanation:"سورة البقرة هي أطول سور القرآن، بينما سورة الكوثر هي الأقصر." },
+  { type:"true_false", question:"نزل القرآن الكريم على النبي محمد ﷺ دفعة واحدة كاملة.", correct_answer:2, category:"quran", age_min:11, age_max:99, difficulty:"medium", points:15, explanation:"نزل القرآن الكريم مفرَّقًا على مدى نحو 23 عامًا حسب الأحداث والمناسبات." },
+
+  { type:"matching", question:"طابق كل سورة بالوصف أو اللقب المرتبط بها.", pairs:[
+      { left:"سورة الإخلاص", right:"تعدل ثلث القرآن" },
+      { left:"سورة يس", right:"قلب القرآن" },
+      { left:"سورة الرحمن", right:"عروس القرآن" },
+      { left:"سورة الفاتحة", right:"أم الكتاب" },
+    ], category:"quran", age_min:11, age_max:99, difficulty:"medium", points:20, explanation:"لكل سورة من هذه السور لقب أو وصف اشتهرت به في التراث الإسلامي." },
+  { type:"matching", question:"طابق كل نبي بالسورة التي سُميت باسمه في القرآن الكريم.", pairs:[
+      { left:"يوسف عليه السلام", right:"سورة يوسف" },
+      { left:"نوح عليه السلام", right:"سورة نوح" },
+      { left:"إبراهيم عليه السلام", right:"سورة إبراهيم" },
+      { left:"هود عليه السلام", right:"سورة هود" },
+    ], category:"quran", age_min:8, age_max:99, difficulty:"easy", points:15, explanation:"سُميت هذه السور الأربع باسم الأنبياء الذين تتحدث عنهم." },
+
+  { type:"ordering", question:"رتّب هذه السور حسب ترتيب ورودها في المصحف الشريف من الأولى إلى الأخيرة.", ordered_items:["الفاتحة","البقرة","آل عمران","النساء"], category:"quran", age_min:8, age_max:99, difficulty:"easy", points:15, explanation:"هذا هو ترتيب أوائل سور المصحف الشريف كما هي مرتّبة فيه." },
+  { type:"ordering", question:"رتّب هذه المراحل المتعلقة بجمع القرآن الكريم وتوثيقه من الأقدم إلى الأحدث.", ordered_items:["نزول الوحي في غار حراء","كتابة القرآن في عهد أبي بكر الصديق","توحيد المصحف في عهد عثمان بن عفان","انتشار المصحف الموحَّد في الأمصار الإسلامية"], category:"quran", age_min:14, age_max:99, difficulty:"hard", points:20, explanation:"بدأ الأمر بنزول الوحي، ثم أول جمع للمصحف في عهد أبي بكر، ثم توحيده في عهد عثمان، ثم توزيعه على الأمصار." },
+
+  // -- سبيستون --
+  { type:"true_false", question:"سبيستون قناة فضائية متخصصة في محتوى الأطفال واليافعين.", correct_answer:1, category:"spacetoon", age_min:5, age_max:99, difficulty:"easy", points:10, explanation:"سبيستون قناة عربية موجهة أساسًا للأطفال واليافعين." },
+  { type:"true_false", question:"تعرض سبيستون برامجها بلغتها اليابانية الأصلية دون أي دبلجة.", correct_answer:2, category:"spacetoon", age_min:5, age_max:99, difficulty:"easy", points:10, explanation:"تعتمد سبيستون على دبلجة برامجها إلى اللغة العربية." },
+  { type:"true_false", question:"مسلسل \"كابتن ماجد\" يحكي قصة لاعب كرة قدم يسعى لتحقيق حلمه.", correct_answer:1, category:"spacetoon", age_min:11, age_max:99, difficulty:"medium", points:15, explanation:"يدور كابتن ماجد حول مسيرة لاعب كرة قدم شاب يسعى لتحقيق حلمه." },
+
+  { type:"matching", question:"طابق كل مسلسل كرتوني بموضوعه أو عنصره الرئيسي.", pairs:[
+      { left:"كابتن ماجد", right:"كرة القدم" },
+      { left:"غرندايزر", right:"روبوت ضخم (ميكا)" },
+      { left:"يوغي أوه", right:"بطاقات السحر والتنين" },
+      { left:"المحقق كونان", right:"حل الألغاز الجنائية" },
+    ], category:"spacetoon", age_min:11, age_max:99, difficulty:"medium", points:20, explanation:"لكل مسلسل من هذه المسلسلات موضوعه المميز الذي اشتهر به." },
+  { type:"matching", question:"طابق كل مسلسل بمبدعه ورسّامه الياباني الأصلي.", pairs:[
+      { left:"دراغون بول", right:"أكيرا تورياما" },
+      { left:"ون بيس", right:"أيتشيرو أودا" },
+      { left:"المحقق كونان", right:"غوشو أوياما" },
+      { left:"كابتن ماجد", right:"يويتشي تاكاهاشي" },
+    ], category:"spacetoon", age_min:14, age_max:99, difficulty:"hard", points:20, explanation:"هؤلاء هم الرسامون اليابانيون الأصليون الذين أبدعوا هذه الأعمال." },
+
+  { type:"ordering", question:"رتّب هذه الخطوات لعملية دبلجة مسلسل كرتوني أجنبي إلى العربية من الأولى إلى الأخيرة.", ordered_items:["ترجمة النص الأصلي","اختيار الأصوات المناسبة للشخصيات","تسجيل الحوار بالعربية","مزامنة الصوت مع حركة الشفاه"], category:"spacetoon", age_min:11, age_max:99, difficulty:"medium", points:20, explanation:"هذا هو التسلسل المنطقي العام لخطوات دبلجة أي عمل كرتوني أجنبي." },
+  { type:"ordering", question:"رتّب هذه الأعمال الكرتونية اليابانية حسب سنة عرضها الأصلية الأولى في اليابان، من الأقدم إلى الأحدث.", ordered_items:["غرندايزر","دراغون بول","المحقق كونان","ون بيس"], category:"spacetoon", age_min:14, age_max:99, difficulty:"hard", points:20, explanation:"عُرض غرندايزر أولًا عام 1975، ثم دراغون بول عام 1986، ثم المحقق كونان عام 1996، ثم ون بيس عام 1999." }
 
 ];
 
