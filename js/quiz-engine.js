@@ -4,8 +4,14 @@
 
    يدعم أربعة أنواع أسئلة: اختيار من متعدد (multiple_choice)،
    صح/خطأ (true_false)، مطابقة (matching)، وترتيب (ordering).
-   المؤقت وحساب النقاط وشريط التقدم وربط الإنجازات/الوضع الجماعي
-   تعمل بنفس الطريقة تمامًا لكل الأنواع الأربعة.
+   شريط التقدم وربط الإنجازات/الوضع الجماعي تعمل بنفس الطريقة
+   تمامًا لكل الأنواع الأربعة.
+
+   المؤقت: لكل نوع سؤال مدته الخاصة إن كان المشرف قد حدّدها من
+   لوحة التحكم (أولوية قصوى، تُقيَّم لكل سؤال على حدة)، وإلا
+   تُستخدم القيمة الممرَّرة عند بدء الاختبار (والتي تُحسب مسبقًا
+   خارج المحرك حسب عمر اللاعب أو الفئة المعرفية — دون أي تغيير
+   في تلك الآلية الحالية).
    ========================================================= */
 
 const QuizEngine = (function(){
@@ -18,6 +24,8 @@ const QuizEngine = (function(){
     correctCount: 0,
     wrongCount: 0,
     timePerQuestion: 15,
+    currentTimePerQuestion: 15,
+    typeTimers: null,
     answerTimes: [],
     timerHandle: null,
     remaining: 15,
@@ -57,6 +65,9 @@ const QuizEngine = (function(){
     state.timePerQuestion = timePerQuestion || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
     state.onFinish = onFinish;
     state.settings = await QV.getQuizSettings();
+    // مؤقت كل نوع سؤال (إن حدّده المشرف) — يُجلب مرة واحدة لكامل الاختبار
+    // ثم يُطبَّق تلقائيًا على كل سؤال حسب نوعه عند عرضه
+    state.typeTimers = await QV.getQuestionTypeTimers();
 
     if (questions){
       state.questions = questions;
@@ -80,7 +91,7 @@ const QuizEngine = (function(){
   /* ---------------- عرض السؤال: يوجّه لدالة العرض المناسبة حسب النوع ---------------- */
   function renderQuestion(){
     els.feedbackPanel.hidden = true;
-    els.feedbackPanel.classList.remove("is-correct", "is-wrong");
+    els.feedbackPanel.classList.remove("is-correct", "is-wrong", "is-partial");
     els.checkBtn.hidden = true;
     els.checkBtn.disabled = true;
     els.checkBtn.onclick = null;
@@ -89,6 +100,9 @@ const QuizEngine = (function(){
     const q = state.questions[state.index];
     const type = q.type || "multiple_choice";
     state.currentType = type;
+    // مؤقت هذا السؤال تحديدًا: مؤقت النوع إن كان محددًا من المشرف، وإلا
+    // القيمة العامة المُحسوبة مسبقًا لهذا الاختبار (عمر/فئة/افتراضي)
+    state.currentTimePerQuestion = (state.typeTimers && state.typeTimers[type]) || state.timePerQuestion;
 
     els.counter.textContent = `${state.index + 1} / ${state.questions.length}`;
     els.progressFill.style.width = ((state.index) / state.questions.length * 100) + "%";
@@ -107,8 +121,6 @@ const QuizEngine = (function(){
 
   /* ---------------- 1) اختيار من متعدد (السلوك الأصلي دون أي تغيير) ---------------- */
   function renderMultipleChoice(q){
-    // نخلط ترتيب الخيارات الأربعة في كل عرض (إن كان هذا مفعّلاً من إعدادات المشرف)
-    // بحيث تظهر الإجابة الصحيحة في موضع عشوائي مختلف كل مرة
     const rawOpts = [
       { text: q.option1, isCorrect: Number(q.correct_answer) === 1 },
       { text: q.option2, isCorrect: Number(q.correct_answer) === 2 },
@@ -117,7 +129,7 @@ const QuizEngine = (function(){
     ];
     const shuffleAnswers = !state.settings || state.settings.shuffleAnswers !== false;
     const opts = shuffleAnswers ? QV.shuffle(rawOpts.slice()) : rawOpts;
-    state.currentCorrectPos = opts.findIndex(o => o.isCorrect) + 1; // 1-4 لهذا العرض تحديدًا
+    state.currentCorrectPos = opts.findIndex(o => o.isCorrect) + 1;
 
     const letters = ["أ","ب","ج","د"];
     opts.forEach((opt, i) => {
@@ -130,9 +142,7 @@ const QuizEngine = (function(){
     });
   }
 
-  /* ---------------- 2) صح / خطأ ----------------
-     يعيد استخدام نفس منطق selectAnswer تمامًا (زران فقط بدل أربعة،
-     والقيمة 1=صح تطابق correct_answer:1، و2=خطأ تطابق correct_answer:2) */
+  /* ---------------- 2) صح / خطأ ---------------- */
   function renderTrueFalse(q){
     state.currentCorrectPos = Number(q.correct_answer) === 2 ? 2 : 1;
     els.optionsGrid.classList.add("options-grid--tf");
@@ -151,7 +161,7 @@ const QuizEngine = (function(){
     });
   }
 
-  /* ---------------- 3) مطابقة (سحب وإفلات) ---------------- */
+  /* ---------------- 3) مطابقة (سحب وإفلات — بلا تغيير) ---------------- */
   function renderMatching(q){
     els.optionsGrid.classList.add("options-grid--match");
 
@@ -253,7 +263,6 @@ const QuizEngine = (function(){
     }
 
     function assignChipToZone(chip, zone){
-      // إن كانت المنطقة تحتوي على إجابة سابقة، أعدها كشريحة جديدة إلى المخزن
       if (zone.dataset.assigned){
         const returned = document.createElement("div");
         returned.className = "match-chip";
@@ -293,31 +302,13 @@ const QuizEngine = (function(){
     finalizeAnswer(q, allCorrect, { timedOut });
   }
 
-  /* ---------------- 4) ترتيب (سحب لإعادة الترتيب) ---------------- */
+  /* ---------------- 4) ترتيب — بأزرار ⬆️/⬇️ بدل السحب والإفلات ----------------
+     كل ضغطة تحرّك العنصر خطوة واحدة فقط، مع حركة انتقالية بصرية بسيطة،
+     ويحصل اللاعب على نقاط جزئية بحسب عدد العناصر في مكانها الصحيح. */
   function renderOrdering(q){
     els.optionsGrid.classList.add("options-grid--order");
-
-    const list = document.createElement("div");
-    list.className = "order-list";
-    list.id = "order-list";
     const shuffled = QV.shuffle((q.ordered_items || []).slice());
-    shuffled.forEach(item => {
-      const row = document.createElement("div");
-      row.className = "order-item";
-      row.dataset.value = item;
-      const handle = document.createElement("span");
-      handle.className = "order-handle";
-      handle.textContent = "⠿";
-      const text = document.createElement("span");
-      text.className = "order-text";
-      text.textContent = item;
-      row.appendChild(handle);
-      row.appendChild(text);
-      list.appendChild(row);
-    });
-    els.optionsGrid.appendChild(list);
-
-    initOrderingDrag();
+    buildOrderList(shuffled);
 
     els.checkBtn.hidden = false;
     els.checkBtn.disabled = false;
@@ -325,60 +316,61 @@ const QuizEngine = (function(){
     els.checkBtn.onclick = () => submitOrdering(q, { timedOut: false });
   }
 
-  function initOrderingDrag(){
-    const list = document.getElementById("order-list");
+  function buildOrderList(items, highlightIndexes){
+    const list = document.createElement("div");
+    list.className = "order-list";
+    list.id = "order-list";
 
-    list.querySelectorAll(".order-item").forEach(item => {
-      const handle = item.querySelector(".order-handle");
-      handle.addEventListener("pointerdown", (e) => {
-        if (state.locked) return;
-        e.preventDefault();
-        const dragEl = item;
-        try{ dragEl.setPointerCapture(e.pointerId); }catch(err){/* ignore */}
-        dragEl.classList.add("dragging");
-        let startY = e.clientY;
-        let startRect = dragEl.getBoundingClientRect();
+    items.forEach((item, i) => {
+      const row = document.createElement("div");
+      row.className = "order-item";
+      row.dataset.value = item;
+      if (highlightIndexes && highlightIndexes.includes(i)) row.classList.add("order-swapped");
 
-        const onMove = (ev) => {
-          const dy = ev.clientY - startY;
-          dragEl.style.transform = `translateY(${dy}px)`;
-          dragEl.style.zIndex = 10;
+      const upBtn = document.createElement("button");
+      upBtn.type = "button";
+      upBtn.className = "order-move-btn order-move-up";
+      upBtn.textContent = "⬆️";
+      upBtn.setAttribute("aria-label", "نقل العنصر للأعلى");
+      upBtn.disabled = i === 0;
+      upBtn.addEventListener("click", () => moveOrderItem(i, -1));
 
-          const siblings = Array.from(list.querySelectorAll(".order-item:not(.dragging)"));
-          const draggedMid = startRect.top + startRect.height / 2 + dy;
-          for (const sib of siblings){
-            const rect = sib.getBoundingClientRect();
-            const sibMid = rect.top + rect.height / 2;
-            const dragIsBeforeSib = !!(dragEl.compareDocumentPosition(sib) & Node.DOCUMENT_POSITION_FOLLOWING);
-            if (draggedMid < sibMid && dragIsBeforeSib === false){
-              list.insertBefore(dragEl, sib);
-              startRect = dragEl.getBoundingClientRect();
-              startY = ev.clientY;
-              dragEl.style.transform = "translateY(0px)";
-              break;
-            } else if (draggedMid > sibMid && dragIsBeforeSib === true){
-              list.insertBefore(dragEl, sib.nextSibling);
-              startRect = dragEl.getBoundingClientRect();
-              startY = ev.clientY;
-              dragEl.style.transform = "translateY(0px)";
-              break;
-            }
-          }
-        };
+      const text = document.createElement("span");
+      text.className = "order-text";
+      text.textContent = item;
 
-        const onUp = (ev) => {
-          document.removeEventListener("pointermove", onMove);
-          document.removeEventListener("pointerup", onUp);
-          try{ dragEl.releasePointerCapture(ev.pointerId); }catch(err){/* ignore */}
-          dragEl.classList.remove("dragging");
-          dragEl.style.transform = "";
-          dragEl.style.zIndex = "";
-        };
+      const downBtn = document.createElement("button");
+      downBtn.type = "button";
+      downBtn.className = "order-move-btn order-move-down";
+      downBtn.textContent = "⬇️";
+      downBtn.setAttribute("aria-label", "نقل العنصر للأسفل");
+      downBtn.disabled = i === items.length - 1;
+      downBtn.addEventListener("click", () => moveOrderItem(i, 1));
 
-        document.addEventListener("pointermove", onMove);
-        document.addEventListener("pointerup", onUp);
-      });
+      row.appendChild(upBtn);
+      row.appendChild(text);
+      row.appendChild(downBtn);
+      list.appendChild(row);
     });
+
+    els.optionsGrid.innerHTML = "";
+    els.optionsGrid.appendChild(list);
+  }
+
+  function moveOrderItem(index, direction){
+    if (state.locked) return;
+    const oldList = document.getElementById("order-list");
+    const items = Array.from(oldList.querySelectorAll(".order-item")).map(el => el.dataset.value);
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= items.length) return;
+
+    [items[index], items[newIndex]] = [items[newIndex], items[index]];
+    QVSound.click();
+    buildOrderList(items, [index, newIndex]);
+
+    setTimeout(() => {
+      document.querySelectorAll("#order-list .order-swapped").forEach(el => el.classList.remove("order-swapped"));
+    }, 350);
   }
 
   function submitOrdering(q, { timedOut }){
@@ -390,18 +382,35 @@ const QuizEngine = (function(){
     const list = document.getElementById("order-list");
     const playerOrder = Array.from(list.querySelectorAll(".order-item")).map(el => el.dataset.value);
     const correctOrder = q.ordered_items || [];
-    const isCorrect = playerOrder.length === correctOrder.length && playerOrder.every((v, i) => v === correctOrder[i]);
+    const totalItems = correctOrder.length || 1;
 
-    list.querySelectorAll(".order-item").forEach(el => el.classList.add(isCorrect ? "correct" : "wrong"));
+    let correctPositions = 0;
+    const rows = Array.from(list.querySelectorAll(".order-item"));
+    rows.forEach((row, i) => {
+      const isRight = playerOrder[i] === correctOrder[i];
+      row.classList.add(isRight ? "correct" : "wrong");
+      row.querySelectorAll(".order-move-btn").forEach(b => b.disabled = true);
+      if (isRight) correctPositions += 1;
+    });
+
+    const fraction = correctPositions / totalItems;
+    const isFullyCorrect = fraction === 1;
+    const totalPoints = Number(q.points) || 10;
+    const pointsEarned = Math.round((totalPoints / totalItems) * correctPositions);
+
     els.checkBtn.hidden = true;
 
-    finalizeAnswer(q, isCorrect, { timedOut, orderDetails: { playerOrder, correctOrder } });
+    finalizeAnswer(q, isFullyCorrect, {
+      timedOut,
+      pointsOverride: pointsEarned,
+      orderDetails: { playerOrder, correctOrder, correctPositions, totalItems },
+    });
   }
 
-  /* ---------------- المؤقت (مشترك بين كل الأنواع) ---------------- */
+  /* ---------------- المؤقت (مشترك بين كل الأنواع، بمدة خاصة بكل سؤال) ---------------- */
   function startTimer(){
     clearInterval(state.timerHandle);
-    state.remaining = state.timePerQuestion;
+    state.remaining = state.currentTimePerQuestion;
     state.questionStartedAt = Date.now();
     updateTimerUI();
     state.timerHandle = setInterval(() => {
@@ -412,7 +421,6 @@ const QuizEngine = (function(){
         clearInterval(state.timerHandle);
         if (state.locked) return;
         const q = state.questions[state.index];
-        // انتهى الوقت بدون إجابة: تُحتسب تلقائيًا كخاطئة أيًا كان نوع السؤال
         if (state.currentType === "matching") submitMatching(q, { timedOut: true });
         else if (state.currentType === "ordering") submitOrdering(q, { timedOut: true });
         else selectAnswer(null, null);
@@ -421,7 +429,7 @@ const QuizEngine = (function(){
   }
 
   function updateTimerUI(){
-    const ratio = Math.max(0, state.remaining / state.timePerQuestion);
+    const ratio = Math.max(0, state.remaining / state.currentTimePerQuestion);
     els.timerArc.style.strokeDashoffset = TIMER_CIRC * (1 - ratio);
     els.timerArc.classList.toggle("low", state.remaining <= 5);
     els.timerValue.textContent = Math.max(0, state.remaining);
@@ -450,29 +458,39 @@ const QuizEngine = (function(){
     finalizeAnswer(q, isCorrect, { timedOut: chosen === null });
   }
 
-  /* ---------------- نقطة مشتركة نهائية لكل الأنواع: النقاط، الصوت،
-     لوحة التغذية الراجعة، ربط الإنجازات (onAnswer)، والانتقال التلقائي
-     عند انتهاء الوقت ---------------- */
-  function finalizeAnswer(q, isCorrect, { timedOut, orderDetails } = {}){
+  /* ---------------- نقطة مشتركة نهائية لكل الأنواع ---------------- */
+  function finalizeAnswer(q, isCorrect, { timedOut, orderDetails, pointsOverride } = {}){
     els.feedbackPanel.hidden = false;
     els.progressFill.style.width = ((state.index + 1) / state.questions.length * 100) + "%";
 
+    const fullPoints = Number(q.points) || 10;
+    const awardedPoints = pointsOverride != null ? pointsOverride : (isCorrect ? fullPoints : 0);
+
     if (isCorrect){
-      const points = Number(q.points) || 10;
-      state.score += points;
+      state.score += awardedPoints;
       state.correctCount += 1;
       QVSound.correct();
       els.feedbackPanel.classList.add("is-correct");
       els.feedbackIcon.textContent = "✔";
-      els.feedbackTitle.textContent = `إجابة صحيحة! +${points} نقطة`;
+      els.feedbackTitle.textContent = `إجابة صحيحة! +${awardedPoints} نقطة`;
       els.feedbackExplain.textContent = q.explanation || "";
       fireConfettiBurst();
     } else {
       state.wrongCount += 1;
-      QVSound.wrong();
-      els.feedbackPanel.classList.add("is-wrong");
-      els.feedbackIcon.textContent = "✖";
-      els.feedbackTitle.textContent = timedOut ? "انتهى الوقت!" : "إجابة خاطئة";
+      if (awardedPoints > 0) state.score += awardedPoints;
+
+      if (awardedPoints > 0) QVSound.correct(); else QVSound.wrong();
+      els.feedbackPanel.classList.add(awardedPoints > 0 ? "is-partial" : "is-wrong");
+      els.feedbackIcon.textContent = awardedPoints > 0 ? "➗" : "✖";
+
+      if (timedOut){
+        els.feedbackTitle.textContent = "انتهى الوقت!";
+      } else if (orderDetails && awardedPoints > 0){
+        els.feedbackTitle.textContent = `ترتيب جزئي صحيح (${orderDetails.correctPositions} من ${orderDetails.totalItems}) — +${awardedPoints} نقطة`;
+      } else {
+        els.feedbackTitle.textContent = "إجابة خاطئة";
+      }
+
       let explainText = q.explanation || "";
       if (orderDetails){
         const correctText = "الترتيب الصحيح: " + orderDetails.correctOrder.join(" ← ");
@@ -483,12 +501,10 @@ const QuizEngine = (function(){
 
     if (typeof state.onAnswer === "function"){
       state.onAnswer({
-        questionIndex: state.index, question: q, correct: isCorrect,
-        points: isCorrect ? (Number(q.points) || 10) : 0,
+        questionIndex: state.index, question: q, correct: isCorrect, points: awardedPoints,
       });
     }
 
-    // عند انتهاء الوقت: ينتقل الاختبار تلقائيًا للسؤال التالي دون انتظار ضغط المستخدم
     if (timedOut){
       setTimeout(nextQuestion, 1600);
     }
