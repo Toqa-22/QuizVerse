@@ -194,6 +194,21 @@
 
       <div class="glass-card">
         <h3>تحديث بيانات الحساب</h3>
+        <form id="form-update-profile" class="profile-form">
+          <div class="field">
+            <label for="pf-age">الفئة العمرية</label>
+            <select id="pf-age">
+              <option value="5-7">5-7</option><option value="8-10">8-10</option>
+              <option value="11-13">11-13</option><option value="14-17">14-17</option>
+              <option value="18+">+18</option>
+            </select>
+          </div>
+          <button class="btn btn-ghost btn-block" type="submit">حفظ التغييرات</button>
+          <span class="field-error" id="err-update-profile"></span>
+        </form>
+
+        <hr class="divider">
+
         <h3>تغيير كلمة المرور</h3>
         <form id="form-change-password" class="profile-form">
           <div class="field"><label for="pf-newpass">كلمة المرور الجديدة</label><input type="password" id="pf-newpass" minlength="6" required></div>
