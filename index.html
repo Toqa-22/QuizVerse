@@ -193,19 +193,12 @@
       </div>
 
       <div class="glass-card">
-        <h3>تحديث بيانات الحساب</h3>
-        <form id="form-update-profile" class="profile-form">
-          <div class="field">
-            <label for="pf-age">الفئة العمرية</label>
-            <select id="pf-age">
-              <option value="5-7">5-7</option><option value="8-10">8-10</option>
-              <option value="11-13">11-13</option><option value="14-17">14-17</option>
-              <option value="18+">+18</option>
-            </select>
-          </div>
-          <button class="btn btn-ghost btn-block" type="submit">حفظ التغييرات</button>
-          <span class="field-error" id="err-update-profile"></span>
-        </form>
+        <h3>بيانات الحساب</h3>
+        <div class="field">
+          <label>الفئة العمرية</label>
+          <div class="locked-value" id="pf-age-display">5-7</div>
+          <p class="muted" style="margin-top:6px">تُحدَّد الفئة العمرية مرة واحدة عند إنشاء الحساب فقط ولا يمكن تغييرها لاحقًا، لأنها تحدد مستوى صعوبة الأسئلة ومؤقتها المخصص. إن كانت هناك حاجة لتصحيحها، تواصل مع المشرف.</p>
+        </div>
 
         <hr class="divider">
 
