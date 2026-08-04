@@ -329,25 +329,12 @@ async function renderProfile(){
   document.getElementById("profile-rank").textContent = rank ? "#" + rank : "—";
   document.getElementById("profile-score").textContent = p.total_score || 0;
   document.getElementById("profile-favcat").textContent = p.favorite_category ? (catIcon(p.favorite_category) + " " + catName(p.favorite_category)) : "لم يُحدَّد بعد";
-  document.getElementById("pf-age").value = p.age || "5-7";
+  document.getElementById("pf-age-display").textContent = p.age || "—";
 
   renderAchievements("profile-achievements", p, rank);
 }
 
 function initProfileForms(){
-  document.getElementById("form-update-profile").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const errEl = document.getElementById("err-update-profile");
-    errEl.textContent = "";
-    try{
-      const age = document.getElementById("pf-age").value;
-      AppState.profile = await QV.updateProfile(AppState.profile.id, { age });
-      showToast("تم حفظ التغييرات ✔");
-    }catch(err){
-      errEl.textContent = "تعذّر حفظ التغييرات";
-    }
-  });
-
   document.getElementById("form-change-password").addEventListener("submit", async (e) => {
     e.preventDefault();
     const errEl = document.getElementById("err-change-password");
