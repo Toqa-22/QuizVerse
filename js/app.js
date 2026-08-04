@@ -371,6 +371,9 @@ const CATEGORY_COLORS = {
   sports:     "#f5b301",
   ai:         "#a855f7",
   religion:   "#0d9488",
+  quran:      "#059669",
+  spacetoon:  "#2563eb",
+  spatial:    "#c026d3",
 };
 
 function renderCategories(){
