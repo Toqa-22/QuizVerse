@@ -660,6 +660,13 @@ a{color:var(--violet-dark)}
 .profile-form{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 .divider{border:none;border-top:2px dashed var(--border-soft);margin:20px 0}
 
+.locked-value{
+  display:flex;align-items:center;gap:8px;padding:12px 14px;border-radius:var(--radius-sm);
+  background:var(--surface-tint);border:2px dashed var(--border-soft);font-weight:800;
+  color:var(--ink-1);width:fit-content;
+}
+.locked-value::before{content:"🔒";font-size:.85em}
+
 
 
 @media (max-width: 640px){
@@ -724,4 +731,3 @@ a{color:var(--violet-dark)}
   flex-shrink:0;width:32px;height:32px;border-radius:8px;background:var(--surface-tint);
   border:2px solid var(--border-soft);color:var(--error);font-weight:900;
 }
-
