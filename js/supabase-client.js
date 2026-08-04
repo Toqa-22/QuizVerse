@@ -203,10 +203,17 @@ const QV = (function(){
     return data;
   }
 
+  /* الفئة العمرية تُقفَل بعد إنشاء الحساب — نفس القاعدة مطبَّقة هنا في
+     الوضع التجريبي المحلي، ومن جهة الخادم عبر trigger على قاعدة
+     Supabase الحقيقية (راجع prevent_age_change في sql/schema.sql)،
+     حتى لا تعتمد الحماية على إخفاء الحقل في الواجهة فقط. */
   async function updateProfile(userId, patch){
     if (demoMode){
       const profiles = lsGet(LS_KEYS.profiles, {});
       if (!profiles[userId]) throw new Error("الملف الشخصي غير موجود");
+      if (patch.age !== undefined && patch.age !== profiles[userId].age){
+        throw new Error("لا يمكن تغيير الفئة العمرية بعد إنشاء الحساب");
+      }
       profiles[userId] = { ...profiles[userId], ...patch };
       lsSet(LS_KEYS.profiles, profiles);
       return profiles[userId];
