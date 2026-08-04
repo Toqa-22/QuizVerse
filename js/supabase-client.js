@@ -48,6 +48,7 @@ const QV = (function(){
     quizSettings: "qv_demo_quiz_settings", // { shuffleQuestions, shuffleAnswers, preventRepetition, randomGeneration }
     timers: "qv_demo_category_timers", // { category: seconds }
     ageTimers: "qv_demo_age_timers",   // [{ id, min_age, max_age, time_seconds }]
+    typeTimers: "qv_demo_type_timers", // { multiple_choice: seconds, true_false: seconds, matching: seconds, ordering: seconds }
     adminAccounts: "qv_demo_admin_accounts", // username(lowercase) -> { username, passwordHash } — نفس آلية bootstrap
   };
 
@@ -86,6 +87,7 @@ const QV = (function(){
     return {
       id, username, avatar: avatar || QUIZVERSE_AVATARS[0], age,
       total_score: 0, level: "مبتدئ", games_played: 0, correct_answers: 0,
+      wrong_answers: 0, total_questions_answered: 0,
       streak: 0, last_played_date: null, favorite_category: null,
       achievements: [], completed_combos: [], replay_grants: {},
       recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
@@ -312,6 +314,8 @@ const QV = (function(){
       total_score: (profile.total_score || 0) + result.score,
       games_played: (profile.games_played || 0) + 1,
       correct_answers: (profile.correct_answers || 0) + result.correctCount,
+      wrong_answers: (profile.wrong_answers || 0) + result.wrongCount,
+      total_questions_answered: (profile.total_questions_answered || 0) + result.total,
       streak,
       last_played_date: today,
       favorite_category: result.category || profile.favorite_category,
@@ -405,6 +409,35 @@ const QV = (function(){
     });
     if (demoMode){ lsSet(LS_KEYS.timers, clean); return clean; }
     const { error } = await client.from("app_settings").upsert({ key: "category_timers", value: clean });
+    if (error) throw error;
+    return clean;
+  }
+
+  /* ================= QUESTION-TYPE TIMER SETTINGS (مؤقت مستقل لكل نوع سؤال، بالثواني) =================
+     له الأولوية القصوى عند تطبيق المؤقت على أي سؤال بعينه (راجع quiz-engine.js)، لأن كل
+     نوع سؤال يختلف في طبيعة التفاعل معه (صح/خطأ أسرع من الترتيب أو المطابقة مثلاً). */
+  const DEFAULT_TYPE_TIMERS = {
+    multiple_choice: QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION,
+    true_false: QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION,
+    matching: QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION,
+    ordering: QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION,
+  };
+
+  async function getQuestionTypeTimers(){
+    if (demoMode) return { ...DEFAULT_TYPE_TIMERS, ...lsGet(LS_KEYS.typeTimers, {}) };
+    const { data, error } = await client.from("app_settings").select("value").eq("key", "type_timers").maybeSingle();
+    if (error || !data) return { ...DEFAULT_TYPE_TIMERS };
+    return { ...DEFAULT_TYPE_TIMERS, ...(data.value || {}) };
+  }
+
+  async function saveQuestionTypeTimers(timers){
+    const clean = {};
+    Object.entries(timers || {}).forEach(([type, secs]) => {
+      const n = Math.floor(Number(secs));
+      clean[type] = Number.isFinite(n) && n >= 1 ? n : QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
+    });
+    if (demoMode){ lsSet(LS_KEYS.typeTimers, clean); return clean; }
+    const { error } = await client.from("app_settings").upsert({ key: "type_timers", value: clean });
     if (error) throw error;
     return clean;
   }
@@ -663,6 +696,25 @@ const QV = (function(){
     return data;
   }
 
+  /* يُحدَّث بعد كل اختبار جماعي لتنعكس نتيجة اللاعب فورًا في ترتيب الغرفة
+     (أفضل 3 لاعبين داخل الغرفة، وشاشة "ترتيب الغرف" العامة) */
+  async function updateGamePlayerScore(gameId, userId, score){
+    if (demoMode){
+      const players = lsGet(LS_KEYS.players, {});
+      const list = players[gameId] || [];
+      const idx = list.findIndex(p => p.user_id === userId);
+      if (idx !== -1){
+        list[idx] = { ...list[idx], score };
+        players[gameId] = list;
+        lsSet(LS_KEYS.players, players);
+      }
+      return true;
+    }
+    const { error } = await client.from("game_players").update({ score }).eq("game_id", gameId).eq("user_id", userId);
+    if (error) throw error;
+    return true;
+  }
+
   /* realtime channel subscription (no-op safe wrapper for demo mode) */
   function subscribeToGame(gameId, onChange){
     if (demoMode){
@@ -797,9 +849,10 @@ const QV = (function(){
 
     getQuestions, saveQuestion, deleteQuestion,
     getLeaderboard,
-    getGames, saveGame, deleteGame, joinGame, getGamePlayers, subscribeToGame, unsubscribe,
+    getGames, saveGame, deleteGame, joinGame, getGamePlayers, updateGamePlayerScore, subscribeToGame, unsubscribe,
     canPlay, grantReplay, getQuestionCounts, saveQuestionCounts,
     getCategoryTimers, saveCategoryTimers,
+    getQuestionTypeTimers, saveQuestionTypeTimers,
     getAgeTimerSettings, saveAgeTimerSetting, deleteAgeTimerSetting, resolveQuestionTimer,
     getQuizSettings, saveQuizSettings,
     adminLogin, changeAdminPassword, getStats,
