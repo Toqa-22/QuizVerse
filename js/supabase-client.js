@@ -50,6 +50,7 @@ const QV = (function(){
     ageTimers: "qv_demo_age_timers",   // [{ id, min_age, max_age, time_seconds }]
     typeTimers: "qv_demo_type_timers", // { multiple_choice: seconds, true_false: seconds, matching: seconds, ordering: seconds }
     customCategories: "qv_demo_custom_categories", // [{ id, name, icon }] فئات أضافها المشرف فوق الاثنتي عشرة الأساسية
+    maxTotalPlayers: "qv_demo_max_total_players", // رقم (0 = بلا حد أقصى)
     adminAccounts: "qv_demo_admin_accounts", // username(lowercase) -> { username, passwordHash } — نفس آلية bootstrap
     subAdmins: "qv_demo_sub_admins",  // username(lowercase) -> { id, username, passwordHash, active, created_at }
     activityLog: "qv_demo_activity_log", // مصفوفة بأحدث العمليات أولًا
@@ -112,6 +113,16 @@ const QV = (function(){
     if (username.length < 3) throw new Error("اسم المستخدم قصير جدًا (3 أحرف على الأقل)");
     if (!/^[a-zA-Z0-9_\u0600-\u06FF]+$/.test(username)) throw new Error("اسم المستخدم يجب أن يحتوي أحرفًا وأرقامًا فقط");
     if (password.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 أحرف");
+
+    // الحد الأقصى الكلي للاعبين المسجّلين (إن فعّله المشرف) — يُتحقّق منه قبل
+    // إنشاء أي حساب جديد، فلا يمكن تجاوزه حتى لو استُدعيت هذه الدالة مباشرة
+    const maxPlayers = await getMaxTotalPlayers();
+    if (maxPlayers > 0){
+      const current = await listAllProfiles();
+      if (current.length >= maxPlayers){
+        throw new Error(`التسجيل مغلق حاليًا — اكتمل العدد الأقصى المسموح به من اللاعبين (${maxPlayers})`);
+      }
+    }
 
     const passwordHash = simpleHash(password);
     let id;
@@ -672,6 +683,26 @@ const QV = (function(){
     const { error } = await client.from("app_settings").upsert({ key: "quiz_settings", value: merged });
     if (error) throw error;
     return merged;
+  }
+
+  /* ================= الحد الأقصى الكلي للاعبين المسجّلين في المنصة =================
+     0 أو فارغ = بلا حد أقصى (السلوك الافتراضي، كما كان دائمًا). عند تفعيله،
+     تُرفض محاولات إنشاء حساب جديد بمجرد الوصول للعدد المحدد — راجع signUp
+     أعلاه، حيث يُتحقّق منه من جهة العميل (نفس مستوى الحماية المطبّق على بقية
+     قيود هذا المشروع، لعدم وجود جلسات مصادقة حقيقية من جهة الخادم). */
+  async function getMaxTotalPlayers(){
+    if (demoMode) return lsGet(LS_KEYS.maxTotalPlayers, 0);
+    const { data, error } = await client.from("app_settings").select("value").eq("key", "max_total_players").maybeSingle();
+    if (error || !data) return 0;
+    return Number(data.value) || 0;
+  }
+
+  async function saveMaxTotalPlayers(n){
+    const clean = Math.max(0, Math.floor(Number(n)) || 0);
+    if (demoMode){ lsSet(LS_KEYS.maxTotalPlayers, clean); return clean; }
+    const { error } = await client.from("app_settings").upsert({ key: "max_total_players", value: clean });
+    if (error) throw error;
+    return clean;
   }
 
   /* ================= QUESTIONS =================
@@ -1258,5 +1289,6 @@ const QV = (function(){
     logActivity, getActivityLog, getGamesForOwner, getQuestionsForOwner,
     getQuestionSuggestions, approveQuestionSuggestion, removeGamePlayer,
     getCustomCategories, addCategory, deleteCategory,
+    getMaxTotalPlayers, saveMaxTotalPlayers,
   };
 })();
