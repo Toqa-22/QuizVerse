@@ -36,6 +36,7 @@ const QuizEngine = (function(){
     category: null,
     difficulty: null,
     currentType: "multiple_choice",
+    combo: 0,
     onFinish: null,
   };
 
@@ -65,6 +66,7 @@ const QuizEngine = (function(){
     state.wrongCount = 0;
     state.index = 0;
     state.answerTimes = [];
+    state.combo = 0;
     state.timePerQuestion = timePerQuestion || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
     // عمر اللاعب الحالي (إن كان معلومًا) — أساس أولى أولويات مؤقت السؤال، راجع
     // resolveTimerForType أدناه لشرح كامل ترتيب الأولوية
@@ -477,16 +479,28 @@ const QuizEngine = (function(){
     const q = state.questions[state.index];
     const correctNum = state.currentCorrectPos;
     const buttons = Array.from(els.optionsGrid.children);
-
-    buttons.forEach((b, i) => {
-      const n = i + 1;
-      b.disabled = true;
-      if (n === correctNum) b.classList.add("correct");
-      else if (n === chosen) b.classList.add("wrong");
-      else b.classList.add("dim");
-    });
-
     const isCorrect = chosen === correctNum;
+
+    buttons.forEach(b => { b.disabled = true; });
+
+    if (isCorrect){
+      // إجابة صحيحة: تمييز فوري بالتوهج الأخضر + التكبير اللحظي (عبر CSS)
+      buttons.forEach((b, i) => { if (i + 1 !== chosen) b.classList.add("dim"); });
+      if (buttons[chosen - 1]) buttons[chosen - 1].classList.add("correct");
+    } else {
+      // إجابة خاطئة: اهتزاز فوري للخيار المختار + اهتزاز خفيف للجوال، ثم
+      // إبراز الإجابة الصحيحة باللون الأخضر بعد انتهاء حركة الاهتزاز مباشرة
+      if (chosen != null && buttons[chosen - 1]){
+        buttons[chosen - 1].classList.add("wrong");
+      }
+      buttons.forEach((b, i) => {
+        const n = i + 1;
+        if (n !== chosen && n !== correctNum) b.classList.add("dim");
+      });
+      const revealDelay = chosen != null ? 420 : 0;
+      setTimeout(() => { if (buttons[correctNum - 1]) buttons[correctNum - 1].classList.add("correct"); }, revealDelay);
+    }
+
     finalizeAnswer(q, isCorrect, { timedOut: chosen === null });
   }
 
@@ -507,6 +521,7 @@ const QuizEngine = (function(){
       els.feedbackTitle.textContent = `إجابة صحيحة! +${awardedPoints} نقطة`;
       els.feedbackExplain.textContent = q.explanation || "";
       fireConfettiBurst();
+      if (awardedPoints > 0) spawnFloatingReward(`+${awardedPoints} نقطة`, "reward");
     } else {
       state.wrongCount += 1;
       if (awardedPoints > 0) state.score += awardedPoints;
@@ -515,8 +530,12 @@ const QuizEngine = (function(){
       els.feedbackPanel.classList.add(awardedPoints > 0 ? "is-partial" : "is-wrong");
       els.feedbackIcon.textContent = awardedPoints > 0 ? "➗" : "✖";
 
+      if (awardedPoints === 0 && navigator.vibrate) navigator.vibrate(180);
+      if (awardedPoints > 0) spawnFloatingReward(`+${awardedPoints} نقطة`, "reward");
+
       if (timedOut){
         els.feedbackTitle.textContent = "انتهى الوقت!";
+        QVSound.timeUp();
       } else if (orderDetails && awardedPoints > 0){
         els.feedbackTitle.textContent = `ترتيب جزئي صحيح (${orderDetails.correctPositions} من ${orderDetails.totalItems}) — +${awardedPoints} نقطة`;
       } else {
@@ -531,6 +550,36 @@ const QuizEngine = (function(){
       els.feedbackExplain.textContent = explainText;
     }
 
+    // ---------------- نظام الكومبو (إجابات صحيحة متتالية) ومكافأة السرعة ----------------
+    // إضافية بحتة فوق النقاط الأصلية المحسوبة أعلاه دون أي تعديل عليها؛ الكومبو
+    // يُحتسب فقط للإجابة الصحيحة الكاملة (وليس الجزئية)، ويُصفَّر عند أي إجابة
+    // غير كاملة أو انتهاء الوقت — تمامًا كما هو مطلوب
+    if (isCorrect){
+      state.combo = (state.combo || 0) + 1;
+      const comboRewards = { 3: 20, 5: 50, 10: 100 };
+      const comboBonus = comboRewards[state.combo];
+      if (comboBonus){
+        state.score += comboBonus;
+        QVSound.combo();
+        spawnComboBadge(state.combo, comboBonus);
+      }
+
+      // مكافأة السرعة: إجابة صحيحة خلال أول 30% من الوقت المخصص لهذا السؤال —
+      // كلما كانت الإجابة أسرع كانت المكافأة أكبر (حتى +20 كحد أقصى)
+      if (!timedOut && state.currentTimePerQuestion > 0){
+        const elapsedSec = state.answerTimes[state.answerTimes.length - 1] || 0;
+        const fraction = elapsedSec / state.currentTimePerQuestion;
+        if (fraction <= 0.3){
+          const speedBonus = Math.max(5, Math.round(20 * (1 - fraction / 0.3)));
+          state.score += speedBonus;
+          QVSound.speedBonus();
+          setTimeout(() => spawnFloatingReward(`⚡ مكافأة السرعة +${speedBonus}`, "speed-reward"), 250);
+        }
+      }
+    } else {
+      state.combo = 0;
+    }
+
     if (typeof state.onAnswer === "function"){
       state.onAnswer({
         questionIndex: state.index, question: q, correct: isCorrect, points: awardedPoints,
@@ -540,6 +589,27 @@ const QuizEngine = (function(){
     if (timedOut){
       setTimeout(nextQuestion, 1600);
     }
+  }
+
+  /* ---------------- طبقة النصوص العائمة (نقاط، كومبو، مكافأة سرعة) ---------------- */
+  function spawnFloatingReward(text, cls){
+    const layer = document.getElementById("floating-layer");
+    if (!layer) return;
+    const el = document.createElement("div");
+    el.className = "floating-reward" + (cls ? " " + cls : "");
+    el.textContent = text;
+    layer.appendChild(el);
+    setTimeout(() => el.remove(), 1300);
+  }
+
+  function spawnComboBadge(comboCount, bonus){
+    const layer = document.getElementById("floating-layer");
+    if (!layer) return;
+    const el = document.createElement("div");
+    el.className = "combo-badge";
+    el.textContent = `🔥 Combo x${comboCount}  +${bonus}`;
+    layer.appendChild(el);
+    setTimeout(() => el.remove(), 1500);
   }
 
   function nextQuestion(){
