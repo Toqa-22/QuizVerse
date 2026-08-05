@@ -513,6 +513,14 @@ async function startSoloQuiz(){
 }
 
 window.onQuizFinished = async function(result, isMultiplayer, gameId){
+  // اللعب المباشر: مكافأة سرعة بسيطة تُضاف لنقاط الاختبار الجماعي بحسب
+  // متوسط زمن الإجابة (كلما كان اللاعب أسرع زادت المكافأة) — لا تُطبَّق على
+  // الاختبارات الفردية حتى لا يتغيّر نظام نقاطها الحالي إطلاقًا
+  if (isMultiplayer && gameId && result.correctCount > 0){
+    const speedBonus = Math.max(0, Math.round((12 - result.avgTime) * 2));
+    if (speedBonus > 0) result.score += speedBonus;
+  }
+
   const level = QV.levelForScore(result.score);
   document.getElementById("results-level").textContent = level.name;
   document.getElementById("results-emoji").textContent = level.emoji;
@@ -533,9 +541,20 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
     updateHeaderScore();
     updateStartQuizButtonState();
     if (isMultiplayer && gameId){
-      // نحدّث نتيجة اللاعب داخل صف الغرفة نفسها لتنعكس فورًا في ترتيب
-      // أفضل 3 لاعبين وفي شاشة "ترتيب الغرف" العامة
-      QV.updateGamePlayerScore(gameId, AppState.profile.id, result.score).catch(() => {});
+      // نحدّث نتيجة اللاعب داخل صف الغرفة نفسها لتنعكس فورًا في ترتيب أفضل
+      // 3 لاعبين وفي شاشة "ترتيب الغرف"، ثم نحتسب مكافأة الترتيب الفوري:
+      // 🥇 الأول +50، 🥈 الثاني +30، 🥉 الثالث +15 نقطة إضافية
+      QV.updateGamePlayerScore(gameId, AppState.profile.id, result.score)
+        .then(() => QV.awardRoomPlacementBonus(gameId, AppState.profile.id))
+        .then(async (bonus) => {
+          if (bonus > 0){
+            AppState.profile = await QV.getProfile(AppState.profile.id);
+            updateHeaderScore();
+            const medal = bonus >= 50 ? "🥇" : bonus >= 30 ? "🥈" : "🥉";
+            showToast(`${medal} مكافأة الترتيب: +${bonus} نقطة إضافية!`);
+          }
+        })
+        .catch(() => {});
     }
     if (newlyUnlocked && newlyUnlocked.length){
       const names = newlyUnlocked.map(id => (QUIZVERSE_ACHIEVEMENTS.find(a => a.id === id) || {}).name).filter(Boolean);
