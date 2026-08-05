@@ -742,6 +742,11 @@ a{color:var(--violet-dark)}
   background:var(--surface-tint);border:2px solid var(--border-soft);font-weight:800;font-size:.78rem;color:var(--ink-2);
 }
 .admin-role-badge[hidden]{display:none}
+.nav-badge{
+  display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;
+  border-radius:var(--radius-pill);background:var(--pink);color:#fff;font-size:.68rem;font-weight:900;margin-inline-start:4px;
+}
+.nav-badge[hidden]{display:none}
 .perf-bars{display:flex;flex-direction:column;gap:4px;min-width:110px}
 .perf-bar-row{display:flex;align-items:center;gap:6px;font-size:.7rem;font-weight:700}
 .perf-bar-track{flex:1;height:8px;border-radius:var(--radius-pill);background:var(--surface-tint);border:1.5px solid var(--border-soft);overflow:hidden}
