@@ -52,6 +52,11 @@ const Admin = (function(){
     document.querySelectorAll('input[name="gf-timer-mode"]').forEach(radio => {
       radio.addEventListener("change", () => applyGameTimerModeUI(radio.value));
     });
+    document.getElementById("gf-category").addEventListener("change", async (e) => {
+      const timers = await QV.getCategoryTimers();
+      const t = timers[e.target.value];
+      if (t) document.getElementById("gf-time").value = t;
+    });
     ["gf-dist-easy", "gf-dist-medium", "gf-dist-hard", "gf-qcount"].forEach(id => {
       document.getElementById(id).addEventListener("input", updateDistSumHint);
     });
@@ -67,6 +72,7 @@ const Admin = (function(){
     document.getElementById("form-subadmin").addEventListener("submit", onSaveSubAdmin);
     document.getElementById("btn-cancel-subadmin").addEventListener("click", () => closeModal("modal-subadmin"));
     document.getElementById("btn-close-room-players").addEventListener("click", () => closeModal("modal-room-players"));
+    document.getElementById("form-category").addEventListener("submit", onAddCategory);
 
     populateCategorySelects();
   }
@@ -75,13 +81,6 @@ const Admin = (function(){
     const options = QUIZ_CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join("");
     document.getElementById("qf-category").innerHTML = options;
     document.getElementById("gf-category").innerHTML = options;
-
-    // تعبئة مؤقت الغرفة تلقائيًا بقيمة مؤقت الفئة المُعدّة من قبل المشرف عند اختيارها
-    document.getElementById("gf-category").addEventListener("change", async (e) => {
-      const timers = await QV.getCategoryTimers();
-      const t = timers[e.target.value];
-      if (t) document.getElementById("gf-time").value = t;
-    });
   }
 
   async function onLogin(e){
@@ -117,6 +116,7 @@ const Admin = (function(){
         goTo("screen-admin");
         switchPanel("panel-stats");
         await Promise.all([renderStats(), renderQuestionsTable(), renderGamesTable(), renderSettingsTable(), renderPlayersTable(), renderAgeTimersTable(), renderSubAdminsTable(), renderActivityLogTable(), renderSuggestionsBadge()]);
+        renderCategoriesManagement();
       }
     }catch(err){
       errEl.textContent = err.message || "بيانات الدخول غير صحيحة، أو الحساب لا يملك صلاحية الدخول.";
@@ -561,6 +561,61 @@ const Admin = (function(){
         <td data-label="المؤقت (ثانية)"><input type="number" min="1" max="300" value="${timers[c.id] || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION}" data-timer-cat="${c.id}" class="admin-input"></td>
       </tr>
     `).join("");
+  }
+
+  /* ---------------- custom categories (main admin only) ---------------- */
+  function renderCategoriesManagement(){
+    const tbody = document.getElementById("categories-tbody");
+    tbody.innerHTML = QUIZ_CATEGORIES.map(c => `
+      <tr>
+        <td data-label="الأيقونة">${c.icon}</td>
+        <td data-label="اسم الفئة">${escapeHtml(c.name)}</td>
+        <td class="table-actions" data-label="">
+          ${String(c.id).startsWith("custom_")
+            ? `<button data-del-cat="${c.id}" class="danger">حذف</button>`
+            : `<span class="muted" style="font-size:.78rem">فئة أساسية</span>`}
+        </td>
+      </tr>
+    `).join("");
+
+    tbody.querySelectorAll("[data-del-cat]").forEach(b => b.addEventListener("click", () => onDeleteCategory(b.dataset.delCat)));
+  }
+
+  async function onAddCategory(e){
+    e.preventDefault();
+    const errEl = document.getElementById("cf-err");
+    errEl.textContent = "";
+    const icon = document.getElementById("cf-icon").value;
+    const name = document.getElementById("cf-name").value;
+    try{
+      const row = await QV.addCategory({ name, icon });
+      // نضيفها فورًا لنفس المصفوفة المشتركة QUIZ_CATEGORIES، لتظهر مباشرة في
+      // كل القوائم (شبكة الفئات للاعبين، إدارة الأسئلة، الغرف، الاقتراحات)
+      // دون الحاجة لإعادة تحميل الصفحة
+      QUIZ_CATEGORIES.push(row);
+      document.getElementById("form-category").reset();
+      renderCategoriesManagement();
+      populateCategorySelects();
+      await renderSettingsTable();
+      showToast(`تمت إضافة فئة "${row.name}" بنجاح ✔`);
+    }catch(err){
+      errEl.textContent = err.message || "تعذّر إضافة الفئة";
+    }
+  }
+
+  async function onDeleteCategory(id){
+    if (!confirm("هل تريد حذف هذه الفئة؟ الأسئلة الموجودة بها ستبقى محفوظة لكنها لن تظهر ضمن أي فئة بعد الآن.")) return;
+    try{
+      await QV.deleteCategory(id);
+      const idx = QUIZ_CATEGORIES.findIndex(c => c.id === id);
+      if (idx !== -1) QUIZ_CATEGORIES.splice(idx, 1);
+      renderCategoriesManagement();
+      populateCategorySelects();
+      await renderSettingsTable();
+      showToast("تم حذف الفئة");
+    }catch(err){
+      showToast(err.message || "تعذّر حذف الفئة");
+    }
   }
 
   async function onSaveSettings(){
