@@ -442,7 +442,7 @@ function updateStartQuizButtonState(){
     const allowed = QV.canPlay(AppState.profile, AppState.selectedCategory, AppState.selectedDifficulty);
     if (!allowed){
       btn.disabled = true;
-      hint.textContent = "لقد لعبت هذه الفئة بهذا المستوى من قبل — تواصل مع المشرف لمنحك محاولة إضافية.";
+      hint.textContent = "لقد لعبت هذه الفئة بهذا المستوى اليوم بالفعل — ستُفتح تلقائيًا غدًا، أو تواصل مع المشرف لمنحك محاولة إضافية الآن.";
       return;
     }
   }
@@ -461,7 +461,7 @@ function initStartQuizButton(){
     }
     if (!AppState.selectedCategory) return;
     if (!QV.canPlay(AppState.profile, AppState.selectedCategory, AppState.selectedDifficulty)){
-      showToast("لقد لعبت هذه الفئة بهذا المستوى من قبل — تواصل مع المشرف لمنحك محاولة إضافية.");
+      showToast("لقد لعبت هذه الفئة بهذا المستوى اليوم بالفعل — ستُفتح تلقائيًا غدًا، أو تواصل مع المشرف لمنحك محاولة إضافية الآن.");
       updateStartQuizButtonState();
       return;
     }
@@ -572,7 +572,7 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
 function initResultsActions(){
   document.getElementById("btn-retry").addEventListener("click", () => {
     if (!QV.canPlay(AppState.profile, AppState.selectedCategory, AppState.selectedDifficulty)){
-      showToast("لقد استخدمت محاولتك لهذه الفئة والمستوى — تواصل مع المشرف لمحاولة إضافية.");
+      showToast("لقد استخدمت محاولتك لهذه الفئة والمستوى اليوم — ستُفتح تلقائيًا غدًا، أو تواصل مع المشرف لمحاولة إضافية الآن.");
       renderCategories();
       guardedGoTo("screen-categories");
       return;
