@@ -66,6 +66,7 @@ const Admin = (function(){
     document.getElementById("btn-cancel-age-timer").addEventListener("click", () => closeModal("modal-age-timer"));
 
     document.getElementById("btn-save-settings").addEventListener("click", onSaveSettings);
+    document.getElementById("btn-save-max-players").addEventListener("click", onSaveMaxPlayers);
     document.getElementById("form-admin-password").addEventListener("submit", onChangeAdminPassword);
 
     document.getElementById("btn-new-subadmin").addEventListener("click", () => openSubAdminModal());
@@ -536,9 +537,14 @@ const Admin = (function(){
   const QUESTION_TYPE_ORDER = ["multiple_choice", "true_false", "matching", "ordering"];
 
   async function renderSettingsTable(){
-    const [counts, quizSettings, timers, typeTimers] = await Promise.all([
+    const [counts, quizSettings, timers, typeTimers, maxPlayers, allProfiles] = await Promise.all([
       QV.getQuestionCounts(), QV.getQuizSettings(), QV.getCategoryTimers(), QV.getQuestionTypeTimers(),
+      QV.getMaxTotalPlayers(), QV.listAllProfiles(),
     ]);
+
+    document.getElementById("settings-max-players").value = maxPlayers || 0;
+    document.getElementById("settings-max-players-count").textContent =
+      `اللاعبون المسجّلون حاليًا: ${allProfiles.length}${maxPlayers > 0 ? ` / ${maxPlayers}` : ""}`;
 
     document.getElementById("chk-shuffle-questions").checked = quizSettings.shuffleQuestions !== false;
     document.getElementById("chk-shuffle-answers").checked = quizSettings.shuffleAnswers !== false;
@@ -615,6 +621,18 @@ const Admin = (function(){
       showToast("تم حذف الفئة");
     }catch(err){
       showToast(err.message || "تعذّر حذف الفئة");
+    }
+  }
+
+  async function onSaveMaxPlayers(){
+    const val = Number(document.getElementById("settings-max-players").value) || 0;
+    try{
+      await QV.saveMaxTotalPlayers(val);
+      showToast(val > 0 ? `تم حفظ الحد الأقصى: ${val} لاعب ✔` : "تم إلغاء الحد الأقصى — التسجيل مفتوح الآن للجميع ✔");
+      await renderSettingsTable();
+    }catch(err){
+      showToast(err.message || "تعذّر حفظ الحد الأقصى");
+      console.error(err);
     }
   }
 
@@ -777,9 +795,12 @@ const Admin = (function(){
         <td data-label="النقاط">${p.total_score || 0}</td>
         <td data-label="الاختبارات">${p.games_played || 0}</td>
         <td data-label="اقتراحات الأسئلة">
-          <button type="button" data-toggle-suggest-lock="${p.id}" data-locked="${p.suggestions_locked ? "1" : "0"}" class="${p.suggestions_locked ? "danger" : ""}">
-            ${p.suggestions_locked ? "🔒 محظور — إلغاء" : "🔓 مسموح — حظر"}
-          </button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="mp-status ${p.suggestions_locked ? "finished" : "waiting"}">${p.suggestions_locked ? "🔒 محظور" : "🔓 مسموح"}</span>
+            <button type="button" data-toggle-suggest-lock="${p.id}" data-locked="${p.suggestions_locked ? "1" : "0"}" class="${p.suggestions_locked ? "" : "danger"}">
+              ${p.suggestions_locked ? "إلغاء الحظر" : "حظر"}
+            </button>
+          </div>
         </td>
         <td data-label="منح محاولة إضافية">
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -805,7 +826,7 @@ const Admin = (function(){
           showToast(currentlyLocked ? "تم السماح للاعب بإرسال اقتراحات الأسئلة مجددًا ✔" : "تم حظر اللاعب من إرسال اقتراحات الأسئلة ✔");
           await renderPlayersTable();
         }catch(err){
-          showToast("تعذّر تحديث الحالة");
+          showToast(err.message || "تعذّر تحديث الحالة — تأكد من تنفيذ ملف sql/migrate_suggestions_locked.sql على قاعدة بياناتك");
           console.error(err);
         }
       });
