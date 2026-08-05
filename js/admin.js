@@ -608,6 +608,7 @@ const Admin = (function(){
         <td class="table-actions" data-label="">
           ${g.status === "waiting" ? `<button data-start="${g.id}">بدء</button>` : ""}
           ${g.status === "started" ? `<button data-finish="${g.id}">إنهاء</button>` : ""}
+          <button data-allow-rejoin="${g.id}" data-room-title="${escapeHtml(g.title)}">🔓 سماح بالانضمام</button>
           <button data-del="${g.id}" class="danger">حذف</button>
         </td>
       </tr>
@@ -615,7 +616,19 @@ const Admin = (function(){
 
     tbody.querySelectorAll("[data-start]").forEach(b => b.addEventListener("click", () => setGameStatus(b.dataset.start, "started")));
     tbody.querySelectorAll("[data-finish]").forEach(b => b.addEventListener("click", () => setGameStatus(b.dataset.finish, "finished")));
+    tbody.querySelectorAll("[data-allow-rejoin]").forEach(b => b.addEventListener("click", () => onGrantRoomRejoin(b.dataset.allowRejoin, b.dataset.roomTitle)));
     tbody.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => onDeleteGame(b.dataset.del)));
+  }
+
+  async function onGrantRoomRejoin(gameId, roomTitle){
+    const username = prompt(`اسم مستخدم اللاعب الذي تريد السماح له بالانضمام مرة أخرى لغرفة "${roomTitle}":`);
+    if (!username || !username.trim()) return;
+    try{
+      await QV.grantRoomRejoinByUsername(username.trim(), gameId);
+      showToast(`تم السماح لـ ${username.trim()} بالانضمام مرة أخرى لهذه الغرفة ✔`);
+    }catch(err){
+      showToast(err.message || "تعذّر منح الإذن");
+    }
   }
 
   async function onDeleteGame(id){
