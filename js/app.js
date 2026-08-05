@@ -754,6 +754,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (QV.isDemoMode){
     console.info("QuizVerse يعمل في الوضع التجريبي المحلي (Demo Mode) — لربط Supabase الحقيقي عدّل js/config.js");
   }
+
+  // نُدمج أي فئات معرفية أضافها المشرف فوق الاثنتي عشرة الأساسية *قبل* أي
+  // شاشة تعرض القائمة (شبكة الفئات للاعبين، القوائم المنسدلة في لوحة
+  // التحكم...)، لأن QUIZ_CATEGORIES مصفوفة مشتركة تُقرأ بشكل متزامن في عشرات
+  // الأماكن — إضافتها هنا مبكرًا تجعلها تظهر تلقائيًا في كل مكان دون أي
+  // تعديل آخر على بقية الكود
+  try{
+    const customCats = await QV.getCustomCategories();
+    customCats.forEach(c => {
+      if (!QUIZ_CATEGORIES.some(existing => existing.id === c.id)) QUIZ_CATEGORIES.push(c);
+    });
+  }catch(e){ console.warn("تعذّر تحميل الفئات الإضافية", e); }
+
   initTheme();
   initHeader();
   initBackButtons();
