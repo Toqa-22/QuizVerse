@@ -89,7 +89,7 @@ const QV = (function(){
       total_score: 0, level: "مبتدئ", games_played: 0, correct_answers: 0,
       wrong_answers: 0, total_questions_answered: 0,
       streak: 0, last_played_date: null, favorite_category: null,
-      achievements: [], completed_combos: [], replay_grants: {},
+      achievements: [], completed_combos: [], replay_grants: {}, room_rejoin_grants: {},
       recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
       created_at: new Date().toISOString(),
     };
@@ -345,6 +345,18 @@ const QV = (function(){
       }
     }
 
+    // في الوضع الجماعي: تسجيل استهلاك "إذن إعادة انضمام" إن كان اللاعب قد أكمل
+    // هذه الغرفة تحديدًا من قبل (يُمنح هذا الإذن فقط من المشرف — راجع
+    // grantRoomRejoin أدناه). أول إكمال لأي غرفة يمر دون أي قيد كالمعتاد.
+    if (gameId){
+      const alreadyPlayedRoom = await hasPlayedGame(userId, gameId);
+      if (alreadyPlayedRoom){
+        const roomGrants = { ...(profile.room_rejoin_grants || {}) };
+        if (roomGrants[gameId] > 0) roomGrants[gameId] -= 1;
+        patch.room_rejoin_grants = roomGrants;
+      }
+    }
+
     const updated = await updateProfile(userId, patch);
 
     await addGameHistory({
@@ -375,6 +387,45 @@ const QV = (function(){
     const grants = { ...(profile.replay_grants || {}) };
     grants[key] = (grants[key] || 0) + 1;
     return updateProfile(userId, { replay_grants: grants });
+  }
+
+  /* ================= ROOM JOIN RESTRICTIONS (مرة واحدة لكل غرفة جماعية) =================
+     يُسمح للاعب بإكمال أي غرفة جماعية مرة واحدة فقط. محاولة الانضمام مجددًا
+     لغرفة سبق أن أكملها تُرفض، إلا إذا منحه المشرف إذن إعادة انضمام صريحًا
+     لتلك الغرفة تحديدًا (يُستهلك تلقائيًا عند إكمالها مرة أخرى). */
+  async function hasPlayedGame(userId, gameId){
+    if (!userId || !gameId) return false;
+    if (demoMode){
+      const hist = lsGet(LS_KEYS.history, []);
+      return hist.some(h => h.user_id === userId && h.game_id === gameId);
+    }
+    const { data, error } = await client.from("game_history").select("id").eq("user_id", userId).eq("game_id", gameId).limit(1);
+    if (error){ console.error(error); return false; }
+    return (data || []).length > 0;
+  }
+
+  async function canJoinRoom(profile, gameId){
+    if (!profile || !gameId) return true;
+    const played = await hasPlayedGame(profile.id, gameId);
+    if (!played) return true;
+    const grants = profile.room_rejoin_grants || {};
+    return (grants[gameId] || 0) > 0;
+  }
+
+  async function grantRoomRejoin(userId, gameId){
+    const profile = await getProfile(userId);
+    if (!profile) throw new Error("اللاعب غير موجود");
+    const grants = { ...(profile.room_rejoin_grants || {}) };
+    grants[gameId] = (grants[gameId] || 0) + 1;
+    return updateProfile(userId, { room_rejoin_grants: grants });
+  }
+
+  async function grantRoomRejoinByUsername(username, gameId){
+    const profiles = await listAllProfiles();
+    const target = (username || "").trim().toLowerCase();
+    const profile = profiles.find(p => (p.username || "").toLowerCase() === target);
+    if (!profile) throw new Error("لم يتم العثور على لاعب بهذا الاسم");
+    return grantRoomRejoin(profile.id, gameId);
   }
 
   /* ================= QUESTION-COUNT SETTINGS (لكل فئة) ================= */
@@ -851,6 +902,7 @@ const QV = (function(){
     getLeaderboard,
     getGames, saveGame, deleteGame, joinGame, getGamePlayers, updateGamePlayerScore, subscribeToGame, unsubscribe,
     canPlay, grantReplay, getQuestionCounts, saveQuestionCounts,
+    hasPlayedGame, canJoinRoom, grantRoomRejoin, grantRoomRejoinByUsername,
     getCategoryTimers, saveCategoryTimers,
     getQuestionTypeTimers, saveQuestionTypeTimers,
     getAgeTimerSettings, saveAgeTimerSetting, deleteAgeTimerSetting, resolveQuestionTimer,
