@@ -15,7 +15,10 @@ const Admin = (function(){
   // اللوحات المتاحة للمشرف الرئيسي فقط — يُمنع المشرف الفرعي من الوصول إليها
   // حتى لو حاول تفعيلها يدويًا (حماية إضافية من جهة الواجهة، إلى جانب إخفاء
   // أزرارها بالكامل من القائمة الجانبية)
-  const ADMIN_ONLY_PANELS = new Set(["panel-stats", "panel-settings", "panel-age-timers", "panel-players", "panel-subadmins", "panel-activity"]);
+  const ADMIN_ONLY_PANELS = new Set(["panel-stats", "panel-settings", "panel-age-timers", "panel-players", "panel-subadmins", "panel-activity", "panel-suggestions"]);
+  // لوحة خاصة بالمشرف الفرعي فقط — لا تظهر إطلاقًا للمشرف الرئيسي (الذي يملك
+  // أصلاً لوحة "👤 اللاعبون" الشاملة الأكثر تفصيلاً)
+  const SUBADMIN_ONLY_PANELS = new Set(["panel-subadmin-stats"]);
 
   function init(){
     document.getElementById("form-admin-login").addEventListener("submit", onLogin);
@@ -48,6 +51,9 @@ const Admin = (function(){
     document.getElementById("btn-cancel-game").addEventListener("click", () => closeModal("modal-game"));
     document.querySelectorAll('input[name="gf-timer-mode"]').forEach(radio => {
       radio.addEventListener("change", () => applyGameTimerModeUI(radio.value));
+    });
+    ["gf-dist-easy", "gf-dist-medium", "gf-dist-hard", "gf-qcount"].forEach(id => {
+      document.getElementById(id).addEventListener("input", updateDistSumHint);
     });
 
     document.getElementById("btn-new-age-timer").addEventListener("click", () => openAgeTimerModal());
@@ -94,7 +100,7 @@ const Admin = (function(){
         applyRoleVisibility();
         goTo("screen-admin");
         switchPanel("panel-questions");
-        await Promise.all([renderQuestionsTable(), renderGamesTable(), renderSuggestionsBadge()]);
+        await Promise.all([renderQuestionsTable(), renderGamesTable(), renderSubAdminStatsTable()]);
         await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "تسجيل دخول" });
       } else {
         const result = await QV.adminLogin(username, pass);
@@ -126,6 +132,7 @@ const Admin = (function(){
     currentRole = "admin";
     currentSubAdminId = null;
     document.querySelectorAll('[data-role="admin"]').forEach(el => { el.hidden = false; });
+    document.querySelectorAll('[data-role="subadmin"]').forEach(el => { el.hidden = true; });
     const badge = document.getElementById("admin-role-badge");
     if (badge) badge.hidden = true;
     goTo("screen-welcome");
@@ -135,6 +142,7 @@ const Admin = (function(){
   function applyRoleVisibility(){
     const isSub = currentRole === "subadmin";
     document.querySelectorAll('[data-role="admin"]').forEach(el => { el.hidden = isSub; });
+    document.querySelectorAll('[data-role="subadmin"]').forEach(el => { el.hidden = !isSub; });
     const badge = document.getElementById("admin-role-badge");
     if (badge){
       badge.hidden = !isSub;
@@ -167,13 +175,16 @@ const Admin = (function(){
 
   function switchPanel(id){
     // حماية إضافية من جهة الواجهة: لا يمكن لمشرف فرعي فتح لوحة مخصصة للمشرف
-    // الرئيسي فقط، حتى لو حاول استدعاء التبديل مباشرة
+    // الرئيسي فقط، ولا يمكن للمشرف الرئيسي فتح لوحة مخصصة لمشرف فرعي فقط،
+    // حتى لو حاول أحدهما استدعاء التبديل مباشرة
     if (currentRole === "subadmin" && ADMIN_ONLY_PANELS.has(id)) id = "panel-questions";
+    if (currentRole === "admin" && SUBADMIN_ONLY_PANELS.has(id)) id = "panel-stats";
     document.querySelectorAll(".admin-nav-btn[data-panel]").forEach(b => b.classList.toggle("active", b.dataset.panel === id));
     document.querySelectorAll(".admin-panel").forEach(p => p.classList.toggle("active", p.id === id));
     if (id === "panel-subadmins") renderSubAdminsTable();
     if (id === "panel-activity") renderActivityLogTable();
     if (id === "panel-suggestions") renderSuggestionsTable();
+    if (id === "panel-subadmin-stats") renderSubAdminStatsTable();
   }
 
   /* ---------------- stats ---------------- */
@@ -860,6 +871,7 @@ const Admin = (function(){
     document.getElementById("gf-dist-medium").value = 0;
     document.getElementById("gf-dist-hard").value = 0;
     document.getElementById("gf-dist-err").textContent = "";
+    updateDistSumHint();
     applyGameTimerModeUI("custom");
     openModal("modal-game");
   }
@@ -868,17 +880,37 @@ const Admin = (function(){
     document.getElementById("gf-time-group").hidden = mode === "age_based";
   }
 
+  /* يُحدَّث حيًا مع كل تغيير في عدد أسئلة أي مستوى أو في عدد الأسئلة الكلي،
+     ليرى المشرف/المشرف الفرعي فورًا إن كان المجموع مطابقًا للعدد الكلي */
+  function updateDistSumHint(){
+    const easy = Number(document.getElementById("gf-dist-easy").value) || 0;
+    const medium = Number(document.getElementById("gf-dist-medium").value) || 0;
+    const hard = Number(document.getElementById("gf-dist-hard").value) || 0;
+    const total = Number(document.getElementById("gf-qcount").value) || 0;
+    const sum = easy + medium + hard;
+    const hint = document.getElementById("gf-dist-sum-hint");
+    if (sum === 0){
+      hint.textContent = "المجموع الحالي: 0 (التوزيع معطّل — سيُستخدم مستوى واحد ثابت)";
+      hint.style.color = "";
+    } else {
+      hint.textContent = `المجموع الحالي: ${sum} / ${total}`;
+      hint.style.color = sum === total ? "var(--green)" : "var(--error)";
+    }
+  }
+
   async function onSaveGame(e){
     e.preventDefault();
     const timerMode = document.querySelector('input[name="gf-timer-mode"]:checked').value;
+    const questionCount = Number(document.getElementById("gf-qcount").value);
 
     const distEasy = Number(document.getElementById("gf-dist-easy").value) || 0;
     const distMedium = Number(document.getElementById("gf-dist-medium").value) || 0;
     const distHard = Number(document.getElementById("gf-dist-hard").value) || 0;
+    const distSum = distEasy + distMedium + distHard;
     const distErrEl = document.getElementById("gf-dist-err");
     distErrEl.textContent = "";
-    if (distEasy + distMedium + distHard > 100){
-      distErrEl.textContent = "مجموع نسب الصعوبة يجب ألا يتجاوز 100%";
+    if (distSum > 0 && distSum !== questionCount){
+      distErrEl.textContent = `مجموع عدد أسئلة المستويات (${distSum}) يجب أن يساوي عدد الأسئلة الكلي (${questionCount}) تمامًا، أو اترك الكل 0 لتعطيل التوزيع`;
       return;
     }
 
@@ -894,7 +926,7 @@ const Admin = (function(){
       title: document.getElementById("gf-title").value.trim(),
       description: document.getElementById("gf-desc").value.trim(),
       category: document.getElementById("gf-category").value,
-      question_count: Number(document.getElementById("gf-qcount").value),
+      question_count: questionCount,
       max_players: Number(document.getElementById("gf-maxplayers").value),
       min_age: Number(document.getElementById("gf-age-min").value),
       max_age: Number(document.getElementById("gf-age-max").value),
@@ -903,13 +935,15 @@ const Admin = (function(){
       // الغرفة تنتمي للمشرف الفرعي الذي أنشأها (إن وُجد)، ما يحصر إدارتها لاحقًا
       // على صاحبها فقط — تبقى غرف المشرف الرئيسي بلا مالك كما كانت دائمًا
       owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
-      // إعدادات العشوائية الخاصة بهذه الغرفة تحديدًا (ميزة #8)
+      // إعدادات العشوائية الخاصة بهذه الغرفة تحديدًا (ميزة #8) — توزيع المستويات
+      // الآن بعدد أسئلة صريح لكل مستوى (وليس نسبة مئوية)، يساوي مجموعه دائمًا
+      // عدد الأسئلة الكلي أعلاه عند تفعيله
       quiz_random_settings: {
         shuffleQuestions: document.getElementById("gf-shuffle-questions").checked,
         shuffleAnswers: document.getElementById("gf-shuffle-answers").checked,
         ageFilterEnabled: document.getElementById("gf-age-filter").checked,
         allowedTypes,
-        difficultyDistribution: (distEasy + distMedium + distHard) > 0
+        difficultyDistribution: distSum > 0
           ? { easy: distEasy, medium: distMedium, hard: distHard }
           : null,
       },
@@ -1148,6 +1182,40 @@ const Admin = (function(){
       showToast("تعذّر إزالة اللاعب");
       console.error(err);
     }
+  }
+
+  /* ---------------- sub admin's own aggregate player stats (sub admin only) ----------------
+     يجمع أداء كل لاعب عبر كل غرف هذا المشرف الفرعي تحديدًا (مجموع نقاطه في
+     غرفه + عدد غرفه التي شارك بها) — للتفاصيل الكاملة لغرفة واحدة، يستخدم
+     المشرف الفرعي زر "👥 اللاعبون" الموجود أصلاً أمام كل غرفة على حدة. */
+  async function renderSubAdminStatsTable(){
+    if (currentRole !== "subadmin") return;
+    const tbody = document.getElementById("subadmin-stats-tbody");
+    const games = await visibleGames();
+    if (!games.length){
+      tbody.innerHTML = `<tr><td colspan="4" class="muted" style="text-align:center;padding:24px">لا توجد غرف بعد — أنشئ غرفة من "🎮 الغرف الجماعية" أولاً</td></tr>`;
+      return;
+    }
+    const perGamePlayers = await Promise.all(games.map(g => QV.getGamePlayers(g.id)));
+    const agg = new Map();
+    perGamePlayers.forEach(players => {
+      players.forEach(p => {
+        const key = p.user_id || p.name;
+        const entry = agg.get(key) || { name: p.name, avatar: p.avatar, age: p.age, totalScore: 0, roomsPlayed: 0 };
+        entry.totalScore += (p.score || 0);
+        entry.roomsPlayed += 1;
+        agg.set(key, entry);
+      });
+    });
+    const rows = Array.from(agg.values()).sort((a, b) => b.totalScore - a.totalScore);
+    tbody.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td data-label="اللاعب">${r.avatar || "🙂"} ${escapeHtml(r.name || "لاعب")}</td>
+        <td data-label="العمر">${r.age || "—"}</td>
+        <td data-label="إجمالي النقاط في غرفك">${r.totalScore}</td>
+        <td data-label="عدد غرفك التي شارك فيها">${r.roomsPlayed}</td>
+      </tr>
+    `).join("") : `<tr><td colspan="4" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون في غرفك بعد</td></tr>`;
   }
 
   function escapeHtml(str){
