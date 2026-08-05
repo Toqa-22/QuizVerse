@@ -776,6 +776,11 @@ const Admin = (function(){
         <td data-label="نسبة الصحة">${accuracy}%</td>
         <td data-label="النقاط">${p.total_score || 0}</td>
         <td data-label="الاختبارات">${p.games_played || 0}</td>
+        <td data-label="اقتراحات الأسئلة">
+          <button type="button" data-toggle-suggest-lock="${p.id}" data-locked="${p.suggestions_locked ? "1" : "0"}" class="${p.suggestions_locked ? "danger" : ""}">
+            ${p.suggestions_locked ? "🔒 محظور — إلغاء" : "🔓 مسموح — حظر"}
+          </button>
+        </td>
         <td data-label="منح محاولة إضافية">
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <select data-grant-cat="${p.id}">${catOptions}</select>
@@ -789,7 +794,22 @@ const Admin = (function(){
         </td>
       </tr>
     `;
-    }).join("") : `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون مسجّلون بعد</td></tr>`;
+    }).join("") : `<tr><td colspan="10" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون مسجّلون بعد</td></tr>`;
+
+    tbody.querySelectorAll("[data-toggle-suggest-lock]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.toggleSuggestLock;
+        const currentlyLocked = btn.dataset.locked === "1";
+        try{
+          await QV.setPlayerSuggestionsLocked(id, !currentlyLocked);
+          showToast(currentlyLocked ? "تم السماح للاعب بإرسال اقتراحات الأسئلة مجددًا ✔" : "تم حظر اللاعب من إرسال اقتراحات الأسئلة ✔");
+          await renderPlayersTable();
+        }catch(err){
+          showToast("تعذّر تحديث الحالة");
+          console.error(err);
+        }
+      });
+    });
 
     tbody.querySelectorAll("[data-grant-btn]").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -828,6 +848,7 @@ const Admin = (function(){
           ${g.status === "waiting" ? `<button data-start="${g.id}">بدء</button>` : ""}
           ${g.status === "started" ? `<button data-finish="${g.id}">إنهاء</button>` : ""}
           <button data-view-players="${g.id}">👥 اللاعبون</button>
+          <button data-edit-maxplayers="${g.id}" data-current-max="${g.max_players}">✏️ عدد اللاعبين</button>
           <button data-allow-rejoin="${g.id}" data-room-title="${escapeHtml(g.title)}">🔓 سماح بالانضمام</button>
           <button data-del="${g.id}" class="danger">حذف</button>
         </td>
@@ -837,8 +858,33 @@ const Admin = (function(){
     tbody.querySelectorAll("[data-start]").forEach(b => b.addEventListener("click", () => setGameStatus(b.dataset.start, "started")));
     tbody.querySelectorAll("[data-finish]").forEach(b => b.addEventListener("click", () => setGameStatus(b.dataset.finish, "finished")));
     tbody.querySelectorAll("[data-view-players]").forEach(b => b.addEventListener("click", () => openRoomPlayersModal(b.dataset.viewPlayers)));
+    tbody.querySelectorAll("[data-edit-maxplayers]").forEach(b => b.addEventListener("click", () => onEditMaxPlayers(b.dataset.editMaxplayers, b.dataset.currentMax)));
     tbody.querySelectorAll("[data-allow-rejoin]").forEach(b => b.addEventListener("click", () => onGrantRoomRejoin(b.dataset.allowRejoin, b.dataset.roomTitle)));
     tbody.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => onDeleteGame(b.dataset.del)));
+  }
+
+  /* تعديل الحد الأقصى لعدد اللاعبين المسموح به في غرفة قائمة بالفعل — يمكن
+     زيادته أو تخفيضه في أي وقت، حتى بعد بدء الغرفة أو أثناء انضمام لاعبين لها */
+  async function onEditMaxPlayers(gameId, currentMax){
+    const val = prompt(`أدخل العدد الجديد للاعبين المسموح به في هذه الغرفة (الحالي: ${currentMax}):`, currentMax);
+    if (val === null) return;
+    const n = Number(val);
+    if (!Number.isFinite(n) || n < 1){
+      showToast("الرجاء إدخال رقم صحيح أكبر من صفر");
+      return;
+    }
+    try{
+      await QV.saveGame({ id: gameId, max_players: n });
+      showToast("تم تحديث عدد اللاعبين المسموح به لهذه الغرفة ✔");
+      await renderGamesTable();
+      if (currentRole === "subadmin"){
+        const g = editingGames.find(x => x.id === gameId);
+        await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "تعديل عدد اللاعبين المسموح به", roomName: g ? g.title : null });
+      }
+    }catch(err){
+      showToast("تعذّر تحديث عدد اللاعبين");
+      console.error(err);
+    }
   }
 
   async function onGrantRoomRejoin(gameId, roomTitle){
