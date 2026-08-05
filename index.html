@@ -521,7 +521,8 @@
         <button class="admin-nav-btn" data-panel="panel-age-timers" data-role="admin">⏱️ مؤقت الأعمار</button>
         <button class="admin-nav-btn" data-panel="panel-players" data-role="admin">👤 اللاعبون</button>
         <button class="admin-nav-btn" data-panel="panel-games">🎮 الغرف الجماعية</button>
-        <button class="admin-nav-btn" data-panel="panel-suggestions">📮 اقتراحات اللاعبين <span class="nav-badge" id="suggestions-badge" hidden>0</span></button>
+        <button class="admin-nav-btn" data-panel="panel-subadmin-stats" data-role="subadmin">📊 إحصائيات اللاعبين</button>
+        <button class="admin-nav-btn" data-panel="panel-suggestions" data-role="admin">📮 اقتراحات اللاعبين <span class="nav-badge" id="suggestions-badge" hidden>0</span></button>
         <button class="admin-nav-btn" data-panel="panel-subadmins" data-role="admin">🧩 المشرفون الفرعيون</button>
         <button class="admin-nav-btn" data-panel="panel-activity" data-role="admin">🗒️ سجل النشاط</button>
         <button class="admin-nav-btn" id="btn-admin-logout">🚪 خروج</button>
@@ -684,8 +685,8 @@
           </div>
         </div>
 
-        <!-- Player-submitted question suggestions (both roles) -->
-        <div class="admin-panel" id="panel-suggestions">
+        <!-- Player-submitted question suggestions (main admin only) -->
+        <div class="admin-panel" id="panel-suggestions" data-role="admin">
           <div class="admin-panel-head">
             <h2>📮 اقتراحات أسئلة اللاعبين</h2>
           </div>
@@ -694,6 +695,20 @@
             <table class="admin-table" id="suggestions-table">
               <thead><tr><th>المرسل</th><th>السؤال</th><th>النوع</th><th>الفئة</th><th>المستوى</th><th></th></tr></thead>
               <tbody id="suggestions-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Player statistics scoped to sub admin's own rooms (sub admin only) -->
+        <div class="admin-panel" id="panel-subadmin-stats" data-role="subadmin">
+          <div class="admin-panel-head">
+            <h2>📊 إحصائيات لاعبي غرفك</h2>
+          </div>
+          <p class="muted">إجمالي أداء كل لاعب عبر كل غرفك مجتمعة. لتفاصيل لاعبي غرفة واحدة تحديدًا، افتح "👥 اللاعبون" أمام تلك الغرفة من لوحة "🎮 الغرف الجماعية".</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="subadmin-stats-table">
+              <thead><tr><th>اللاعب</th><th>العمر</th><th>إجمالي النقاط في غرفك</th><th>عدد غرفك التي شارك فيها</th></tr></thead>
+              <tbody id="subadmin-stats-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -878,12 +893,13 @@
     </div>
 
     <div class="field">
-      <label>توزيع نسب الصعوبة (تُترك 0 لتعطيل التوزيع واستخدام مستوى واحد ثابت)</label>
-      <div class="field-grid" style="grid-template-columns:1fr 1fr 1fr">
-        <div class="field"><label>سهل %</label><input type="number" id="gf-dist-easy" min="0" max="100" value="0"></div>
-        <div class="field"><label>متوسط %</label><input type="number" id="gf-dist-medium" min="0" max="100" value="0"></div>
-        <div class="field"><label>صعب %</label><input type="number" id="gf-dist-hard" min="0" max="100" value="0"></div>
+      <label>توزيع عدد الأسئلة حسب المستوى (اترك الكل 0 لتعطيل التوزيع واستخدام مستوى واحد ثابت) — يجب أن يساوي مجموعها عدد الأسئلة الكلي أعلاه</label>
+      <div class="field-grid dist-grid">
+        <div class="field"><label>سهل (عدد)</label><input type="number" id="gf-dist-easy" min="0" value="0"></div>
+        <div class="field"><label>متوسط (عدد)</label><input type="number" id="gf-dist-medium" min="0" value="0"></div>
+        <div class="field"><label>صعب (عدد)</label><input type="number" id="gf-dist-hard" min="0" value="0"></div>
       </div>
+      <p class="muted" id="gf-dist-sum-hint" style="margin-top:4px">المجموع الحالي: 0</p>
       <span class="field-error" id="gf-dist-err"></span>
     </div>
 
