@@ -234,6 +234,9 @@ const Multiplayer = (function(){
     QuizEngine.start({
       category: currentGame.category,
       timePerQuestion,
+      // العمر يُمرَّر فقط في وضع "حسب العمر" — تبقى غرفة "مخصص" بمؤقتها الثابت
+      // كما اختاره المشرف تمامًا لكل اللاعبين دون أي أولوية للعمر فيها
+      age: currentGame.timer_mode === "age_based" ? currentPlayerAge : null,
       questions,
       // إعدادات عشوائية الإجابات الخاصة بهذه الغرفة تحديدًا (إن وُجدت) — راجع
       // ميزة "إعدادات العشوائية لكل غرفة" في لوحة تحكم المشرف/المشرف الفرعي
