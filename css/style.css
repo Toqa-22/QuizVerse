@@ -754,6 +754,55 @@ a{color:var(--violet-dark)}
 }
 .locked-value::before{content:"🔒";font-size:.85em}
 
+/* ================= 🎲 random challenge ================= */
+.btn-random-challenge{
+  background:linear-gradient(135deg,#ff5c8a,#ff8a00,#6d5bff);
+  background-size:200% 200%;
+  color:#fff;font-weight:900;
+  animation:randomGradientShift 4s ease infinite;
+  box-shadow:5px 5px 0 var(--border);
+}
+.btn-random-challenge:hover:not(:disabled){transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--border)}
+.btn-random-challenge:active:not(:disabled){transform:translate(0,0);box-shadow:3px 3px 0 var(--border)}
+@keyframes randomGradientShift{
+  0%,100%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+}
+
+.random-rolling-wrap{
+  min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:6px;
+}
+.random-rolling-dice{
+  font-size:5.5rem;line-height:1;margin-bottom:10px;
+  animation:diceRoll 0.7s cubic-bezier(.4,1.8,.6,1) infinite;
+}
+@keyframes diceRoll{
+  0%{transform:rotate(0) scale(1)}
+  25%{transform:rotate(-25deg) scale(1.08)}
+  50%{transform:rotate(20deg) scale(.96)}
+  75%{transform:rotate(-12deg) scale(1.05)}
+  100%{transform:rotate(0) scale(1)}
+}
+.random-rolling-text{margin:0}
+
+.random-preview-card{text-align:center}
+.random-preview-dice{font-size:3.4rem;line-height:1;margin-bottom:4px;animation:sparkleDrift 1.6s ease-in-out infinite alternate}
+.random-preview-facts{display:flex;flex-direction:column;gap:10px;margin:18px 0;text-align:start}
+.random-preview-facts>div{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 12px;border-radius:var(--radius-sm);background:var(--surface-tint);
+  border:2px solid var(--border-soft);
+}
+.random-preview-facts dt{font-size:.8rem;color:var(--ink-2);font-weight:600}
+.random-preview-facts dd{font-weight:800}
+.random-preview-reward{
+  background:var(--surface-tint);border:2px dashed #ffb020;border-radius:var(--radius-sm);
+  padding:12px 14px;margin-bottom:18px;text-align:start;
+}
+.random-preview-reward p{margin:4px 0;font-size:.88rem}
+.random-preview-reward strong{color:#ff8a00}
+
 
 
 @media (max-width: 640px){
