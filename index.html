@@ -155,6 +155,7 @@
       </div>
       <div class="dash-welcome-actions">
         <button class="btn btn-primary" id="btn-dash-play">🎯 العب الآن</button>
+        <button class="btn btn-ghost" id="btn-dash-group-play">👥 اللعب الجماعي</button>
         <button class="btn btn-ghost" id="btn-dash-profile">👤 ملفي الشخصي</button>
         <button class="btn btn-ghost" id="btn-dash-suggest">💡 اقترح سؤالاً</button>
       </div>
@@ -313,25 +314,11 @@
     <div class="screen-head">
       <button class="btn-back" data-back="screen-dashboard">→ رجوع للوحتي</button>
       <h2>أهلًا <span id="greet-name" class="accent"></span>، جهّز اختبارك</h2>
-      <p class="muted">اختر نمط اللعب، ثم المستوى، ثم الفئة المعرفية</p>
+      <p class="muted">اختر المستوى، ثم الفئة المعرفية</p>
     </div>
 
-    <div class="glass-card mode-card">
-      <h3>1️⃣ نمط اللعب</h3>
-      <div class="mode-row">
-        <button type="button" class="mode-btn active" data-mode="solo">
-          <span class="mode-icon">🎯</span>
-          <span>فردي</span>
-        </button>
-        <button type="button" class="mode-btn" data-mode="multiplayer">
-          <span class="mode-icon">👥</span>
-          <span>جماعي مباشر</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="screen-head" id="level-category-head" style="margin-top:8px">
-      <h3 style="margin:0">2️⃣ مستوى الصعوبة</h3>
+    <div class="screen-head" id="level-category-head">
+      <h3 style="margin:0">1️⃣ مستوى الصعوبة</h3>
     </div>
     <div class="glass-card difficulty-card" id="difficulty-card">
       <div class="difficulty-row" id="difficulty-row" role="radiogroup">
@@ -342,7 +329,7 @@
     </div>
 
     <div class="screen-head" id="category-head" style="margin-top:8px">
-      <h3 style="margin:0">3️⃣ الفئة المعرفية</h3>
+      <h3 style="margin:0">2️⃣ الفئة المعرفية</h3>
     </div>
     <div class="category-grid" id="category-grid"><!-- injected by JS --></div>
 
@@ -358,7 +345,7 @@
   <!-- ============ SCREEN: MULTIPLAYER LOBBY LIST ============ -->
   <section class="screen screen--mp-list" id="screen-mp-list">
     <div class="screen-head">
-      <button class="btn-back" data-back="screen-categories">→ رجوع</button>
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع للوحتي</button>
       <h2>الغرف <span class="accent">الجماعية</span> المتاحة</h2>
       <p class="muted">انضم لغرفة قائمة أو انتظر بدء المضيف</p>
     </div>
@@ -680,7 +667,7 @@
           <p class="muted">كل لاعب يستطيع لعب كل فئة/مستوى مرة واحدة تلقائيًا كل يوم (تُفتح من جديد تلقائيًا مع بداية كل يوم). لمنح محاولة إضافية إن أراد إعادة نفس الفئة والمستوى في نفس اليوم، اختر اللاعب أدناه.</p>
           <div class="table-wrap">
             <table class="admin-table" id="players-table">
-              <thead><tr><th>اللاعب</th><th>الأسئلة المحلولة</th><th>إجابات صحيحة</th><th>إجابات خاطئة</th><th>الأداء</th><th>نسبة الصحة</th><th>النقاط</th><th>الاختبارات</th><th>منح محاولة إضافية</th></tr></thead>
+              <thead><tr><th>اللاعب</th><th>الأسئلة المحلولة</th><th>إجابات صحيحة</th><th>إجابات خاطئة</th><th>الأداء</th><th>نسبة الصحة</th><th>النقاط</th><th>الاختبارات</th><th>اقتراحات الأسئلة</th><th>منح محاولة إضافية</th></tr></thead>
               <tbody id="players-tbody"></tbody>
             </table>
           </div>
