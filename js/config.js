@@ -31,4 +31,9 @@ const QUIZVERSE_ACHIEVEMENTS = [
   { id: "top10",       name: "من الأفضل",       icon: "👑", desc: "كن ضمن أفضل 10 لاعبين",            check: (p, rank) => rank != null && rank <= 10 },
   { id: "score500",    name: "نجم صاعد",        icon: "⭐", desc: "اجمع 500 نقطة أو أكثر",            check: (p) => (p.total_score || 0) >= 500 },
   { id: "games10",     name: "لاعب مثابر",      icon: "🎮", desc: "أكمل 10 اختبارات",                 check: (p) => (p.games_played || 0) >= 10 },
+  // 🎲 إنجازات وضع "التحدي العشوائي"
+  { id: "rc_first",    name: "أول تحدٍ عشوائي", icon: "🎲", desc: "أكمل أول تحدٍ عشوائي لك",          check: (p) => (p.random_challenges_played || 0) >= 1 },
+  { id: "rc_lucky",    name: "محظوظ",           icon: "🍀", desc: "أكمل تحديًا عشوائيًا بإجابات كاملة صحيحة", check: (p) => (p.random_challenge_perfect_count || 0) >= 1 },
+  { id: "rc_master",   name: "سيد العشوائي",     icon: "🎯", desc: "اربح 10 تحديات عشوائية (نصف الأسئلة صحيحة فأكثر)", check: (p) => (p.random_challenges_won || 0) >= 10 },
+  { id: "rc_100",      name: "مدمن التحدي",      icon: "💯", desc: "أكمل 100 تحدٍ عشوائي",             check: (p) => (p.random_challenges_played || 0) >= 100 },
 ];
