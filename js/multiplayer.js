@@ -9,37 +9,72 @@ const Multiplayer = (function(){
   let channel = null;
   let pollHandle = null;
 
+  let listPlayerRef = null;
+  let openRoomsCache = [];
+
   async function renderList(player){
+    listPlayerRef = player;
     const wrap = document.getElementById("mp-list");
     wrap.innerHTML = `<p class="muted">جارٍ تحميل الغرف المتاحة...</p>`;
     const games = await QV.getGames();
     const open = games.filter(g => g.status !== "finished");
 
-    if (!open.length){
+    // نحسب عدد اللاعبين المنضمين حاليًا لكل غرفة لعرضه في بطاقة الغرفة
+    openRoomsCache = await Promise.all(open.map(async (g) => {
+      const players = await QV.getGamePlayers(g.id);
+      return { ...g, playerCount: players.length };
+    }));
+
+    const searchInput = document.getElementById("mp-search");
+    if (searchInput && !searchInput.dataset.bound){
+      searchInput.dataset.bound = "1";
+      searchInput.addEventListener("input", () => renderFilteredList(searchInput.value));
+    }
+    if (searchInput) searchInput.value = "";
+
+    renderFilteredList("");
+  }
+
+  function renderFilteredList(query){
+    const wrap = document.getElementById("mp-list");
+    const q = (query || "").trim().toLowerCase();
+    const filtered = !q ? openRoomsCache : openRoomsCache.filter(g =>
+      (g.title || "").toLowerCase().includes(q) ||
+      catName(g.category).toLowerCase().includes(q) ||
+      (g.category || "").toLowerCase().includes(q)
+    );
+
+    if (!openRoomsCache.length){
       wrap.innerHTML = `<div class="mp-empty">لا توجد غرف جماعية متاحة حاليًا.<br>يمكن لأحد المشرفين إنشاء غرفة جديدة من لوحة التحكم.</div>`;
+      return;
+    }
+    if (!filtered.length){
+      wrap.innerHTML = `<div class="mp-search-empty">لا توجد غرف مطابقة لبحثك.</div>`;
       return;
     }
 
     wrap.innerHTML = "";
-    open.forEach(g => {
+    filtered.forEach(g => {
       const el = document.createElement("div");
       el.className = "mp-item";
-      const statusLabel = { waiting: "بانتظار البدء", started: "جارية الآن", finished: "منتهية" }[g.status] || g.status;
+      const isFull = g.max_players && g.playerCount >= g.max_players;
+      const statusLabel = isFull ? "مكتملة" : { waiting: "بانتظار البدء", started: "جارية الآن", finished: "منتهية" }[g.status] || g.status;
       el.innerHTML = `
         <div>
           <h4>${escapeHtml(g.title)}</h4>
           <span class="mp-tag">${catIcon(g.category)} ${catName(g.category)} · ${g.question_count} أسئلة · ${g.timer_mode === "age_based" ? "⏱️ مؤقت حسب العمر" : g.time_per_question + "ث لكل سؤال"}</span>
+          <br><span class="mp-tag">👥 ${g.playerCount || 0} / ${g.max_players} لاعب${escapeHtml(g.description ? " · " + g.description : "")}</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <span class="mp-status ${g.status}">${g.status === "started" ? "🔴 مباشر الآن" : statusLabel}</span>
-          <button class="btn btn-primary" data-join="${g.id}" ${g.status === "finished" ? "disabled" : ""}>${g.status === "started" ? "انضم الآن" : "انضمام"}</button>
+          <button class="btn btn-primary" data-join="${g.id}" ${g.status === "finished" || isFull ? "disabled" : ""}>${g.status === "started" ? "انضم الآن" : "انضمام"}</button>
         </div>
       `;
       wrap.appendChild(el);
     });
 
     wrap.querySelectorAll("[data-join]").forEach(btn => {
-      btn.addEventListener("click", () => join(btn.dataset.join, player));
+      btn.addEventListener("click", () => join(btn.dataset.join, listPlayerRef));
     });
   }
 
@@ -200,6 +235,9 @@ const Multiplayer = (function(){
       category: currentGame.category,
       timePerQuestion,
       questions,
+      // إعدادات عشوائية الإجابات الخاصة بهذه الغرفة تحديدًا (إن وُجدت) — راجع
+      // ميزة "إعدادات العشوائية لكل غرفة" في لوحة تحكم المشرف/المشرف الفرعي
+      settingsOverride: currentGame.quiz_random_settings || null,
       onFinish: (result) => window.onQuizFinished(result, true, currentGame.id),
     });
   }
