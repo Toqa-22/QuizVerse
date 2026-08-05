@@ -93,7 +93,7 @@ const QV = (function(){
       total_score: 0, level: "مبتدئ", games_played: 0, correct_answers: 0,
       wrong_answers: 0, total_questions_answered: 0,
       streak: 0, last_played_date: null, favorite_category: null,
-      achievements: [], completed_combos: [], replay_grants: {}, room_rejoin_grants: {},
+      achievements: [], completed_combos: [], replay_grants: {}, room_rejoin_grants: {}, combo_last_played: {},
       recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
       created_at: new Date().toISOString(),
     };
@@ -326,19 +326,28 @@ const QV = (function(){
       level: levelForScore((profile.total_score || 0) + result.score).name,
     };
 
-    // تتبّع فئة+مستوى مكتملة، واستهلاك محاولة إضافية إن كانت ممنوحة من المشرف،
-    // وتسجيل أسئلة هذا الاختبار كـ"حديثة" لمنع تكرارها في المرة القادمة
+    // تتبّع فئة+مستوى مكتملة، وتسجيل "تاريخ آخر لعب" لكل تركيبة حتى تُفتح
+    // تلقائيًا من جديد في اليوم التالي لكل لاعب (راجع canPlay أدناه لشرح
+    // الأولوية الكاملة)، واستهلاك محاولة إضافية ممنوحة من المشرف فقط إن كانت
+    // هذه محاولة ثانية أو أكثر لنفس التركيبة في نفس اليوم، وتسجيل أسئلة هذا
+    // الاختبار كـ"حديثة" لمنع تكرارها في المرة القادمة
     if (result.difficulty){
       const comboKey = result.category + ":" + result.difficulty;
       const completed = (profile.completed_combos || []).slice();
       const grants = { ...(profile.replay_grants || {}) };
-      if (completed.includes(comboKey)){
+      const lastPlayed = { ...(profile.combo_last_played || {}) };
+
+      if (lastPlayed[comboKey] === today){
+        // لعبها اليوم بالفعل من قبل — هذه محاولة إضافية استُهلكت من رصيد
+        // منحه المشرف يدويًا (لا علاقة لها بالفتح التلقائي اليومي)
         if (grants[comboKey] > 0) grants[comboKey] -= 1;
-      } else {
-        completed.push(comboKey);
       }
+      if (!completed.includes(comboKey)) completed.push(comboKey);
+      lastPlayed[comboKey] = today;
+
       patch.completed_combos = completed;
       patch.replay_grants = grants;
+      patch.combo_last_played = lastPlayed;
 
       if (result.questionIds && result.questionIds.length){
         const recent = { ...(profile.recent_questions || {}) };
@@ -374,12 +383,18 @@ const QV = (function(){
     return { profile: updated, rank, newlyUnlocked };
   }
 
-  /* ================= PLAY RESTRICTIONS (مرة واحدة لكل فئة+مستوى) ================= */
+  /* ================= PLAY RESTRICTIONS (مرة واحدة يوميًا لكل فئة+مستوى) =================
+     كل تركيبة "فئة + مستوى" تُفتح تلقائيًا من جديد لكل لاعب مع بداية كل يوم
+     ميلادي جديد — لا حاجة لانتظار المشرف. إن حاول اللاعب إعادة لعب نفس
+     التركيبة مرة أخرى في نفس اليوم، يُطلب منه محاولة إضافية يمنحها المشرف
+     يدويًا (عبر grantReplay أدناه) تمامًا كما كان الحال سابقًا. */
   function canPlay(profile, category, difficulty){
     if (!profile || !category || !difficulty) return true;
     const key = category + ":" + difficulty;
-    const completed = profile.completed_combos || [];
-    if (!completed.includes(key)) return true;
+    const lastPlayed = (profile.combo_last_played || {})[key];
+    if (!lastPlayed) return true; // لم يلعب هذه التركيبة من قبل إطلاقًا
+    const today = new Date().toISOString().slice(0, 10);
+    if (lastPlayed !== today) return true; // يوم جديد = فتح تلقائي لمحاولة جديدة
     const grants = profile.replay_grants || {};
     return (grants[key] || 0) > 0;
   }
