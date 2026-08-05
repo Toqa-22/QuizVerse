@@ -931,8 +931,18 @@ const Admin = (function(){
   /* ---------------- sub admins (main admin only) ---------------- */
   async function renderSubAdminsTable(){
     if (currentRole !== "admin") return;
-    const subs = await QV.listSubAdmins();
     const tbody = document.getElementById("subadmins-tbody");
+    let subs = [];
+    try{
+      subs = await QV.listSubAdmins();
+    }catch(err){
+      // نعرض الخطأ الحقيقي بدل ترك الجدول فارغًا بصمت — الأسباب الشائعة: لم
+      // يُنفَّذ ملف SQL بعد، أو تحتاج Supabase لبضع ثوانٍ لتحديث ذاكرة الدوال
+      // المخبأة (schema cache) بعد إنشاء list_sub_admins حديثًا
+      tbody.innerHTML = `<tr><td colspan="4" class="muted" style="text-align:center;padding:24px;color:var(--error)">تعذّر تحميل المشرفين الفرعيين: ${escapeHtml(err.message || "خطأ غير معروف")}</td></tr>`;
+      showToast("تعذّر تحميل المشرفين الفرعيين — راجع الرسالة أسفل الجدول");
+      return;
+    }
     tbody.innerHTML = subs.length ? subs.map(s => `
       <tr>
         <td data-label="اسم المستخدم">🧩 ${escapeHtml(s.username)}</td>
