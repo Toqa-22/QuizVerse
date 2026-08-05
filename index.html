@@ -276,6 +276,9 @@
       <h2>الغرف <span class="accent">الجماعية</span> المتاحة</h2>
       <p class="muted">انضم لغرفة قائمة أو انتظر بدء المضيف</p>
     </div>
+    <div class="field" style="max-width:420px;margin-bottom:16px">
+      <input type="text" id="mp-search" placeholder="🔍 ابحث باسم الغرفة أو الفئة...">
+    </div>
     <div class="mp-list" id="mp-list"><!-- injected --></div>
   </section>
 
@@ -397,9 +400,17 @@
     <div class="screen-head" style="max-width:420px;margin-inline:auto">
       <button class="btn-back" data-back="screen-welcome">→ رجوع</button>
     </div>
+    <div class="role-tabs" style="max-width:420px" id="admin-role-tabs">
+      <button type="button" class="role-tab active" data-role="admin">
+        <span class="role-tab-icon">🛡️</span> مشرف رئيسي
+      </button>
+      <button type="button" class="role-tab" data-role="subadmin">
+        <span class="role-tab-icon">🧩</span> مشرف فرعي
+      </button>
+    </div>
     <form class="glass-card admin-login-card" id="form-admin-login">
-      <p class="eyebrow">دخول المشرف</p>
-      <h2>لوحة التحكم</h2>
+      <p class="eyebrow" id="admin-login-eyebrow">دخول المشرف</p>
+      <h2 id="admin-login-title">لوحة التحكم</h2>
       <div class="field">
         <label for="admin-username">اسم المستخدم</label>
         <input type="text" id="admin-username" required autocomplete="username" placeholder="admin">
@@ -417,18 +428,21 @@
   <section class="screen screen--admin" id="screen-admin">
     <div class="admin-shell">
       <aside class="admin-nav">
-        <button class="admin-nav-btn active" data-panel="panel-stats">📊 الإحصائيات</button>
+        <span class="admin-role-badge" id="admin-role-badge" hidden></span>
+        <button class="admin-nav-btn active" data-panel="panel-stats" data-role="admin">📊 الإحصائيات</button>
         <button class="admin-nav-btn" data-panel="panel-questions">📝 الأسئلة</button>
-        <button class="admin-nav-btn" data-panel="panel-settings">🎚️ إعدادات الاختبار</button>
-        <button class="admin-nav-btn" data-panel="panel-age-timers">⏱️ مؤقت الأعمار</button>
-        <button class="admin-nav-btn" data-panel="panel-players">👤 اللاعبون</button>
+        <button class="admin-nav-btn" data-panel="panel-settings" data-role="admin">🎚️ إعدادات الاختبار</button>
+        <button class="admin-nav-btn" data-panel="panel-age-timers" data-role="admin">⏱️ مؤقت الأعمار</button>
+        <button class="admin-nav-btn" data-panel="panel-players" data-role="admin">👤 اللاعبون</button>
         <button class="admin-nav-btn" data-panel="panel-games">🎮 الغرف الجماعية</button>
+        <button class="admin-nav-btn" data-panel="panel-subadmins" data-role="admin">🧩 المشرفون الفرعيون</button>
+        <button class="admin-nav-btn" data-panel="panel-activity" data-role="admin">🗒️ سجل النشاط</button>
         <button class="admin-nav-btn" id="btn-admin-logout">🚪 خروج</button>
       </aside>
 
       <div class="admin-content">
         <!-- Stats -->
-        <div class="admin-panel active" id="panel-stats">
+        <div class="admin-panel active" id="panel-stats" data-role="admin">
           <h2>نظرة عامة</h2>
           <div class="stats-grid" id="stats-grid"><!-- injected --></div>
           <div class="glass-card">
@@ -447,7 +461,7 @@
             <table class="admin-table" id="questions-table">
               <thead>
                 <tr>
-                  <th>السؤال</th><th>النوع</th><th>الفئة</th><th>العمر</th><th>الصعوبة</th><th>النقاط</th><th></th>
+                  <th>السؤال</th><th>النوع</th><th>الفئة</th><th>الغرفة</th><th>العمر</th><th>الصعوبة</th><th>النقاط</th><th></th>
                 </tr>
               </thead>
               <tbody id="questions-tbody"></tbody>
@@ -456,7 +470,7 @@
         </div>
 
         <!-- Settings: questions per category -->
-        <div class="admin-panel" id="panel-settings">
+        <div class="admin-panel" id="panel-settings" data-role="admin">
           <div class="admin-panel-head">
             <h2>إعدادات عشوائية الاختبار</h2>
             <button class="btn btn-primary" id="btn-save-settings">حفظ الإعدادات</button>
@@ -539,7 +553,7 @@
         </div>
 
         <!-- Age-based timer settings -->
-        <div class="admin-panel" id="panel-age-timers">
+        <div class="admin-panel" id="panel-age-timers" data-role="admin">
           <div class="admin-panel-head">
             <h2>⏱️ مؤقت الأسئلة حسب العمر</h2>
             <button class="btn btn-primary" id="btn-new-age-timer">+ فئة عمرية جديدة</button>
@@ -554,14 +568,14 @@
         </div>
 
         <!-- Players: replay grants -->
-        <div class="admin-panel" id="panel-players">
+        <div class="admin-panel" id="panel-players" data-role="admin">
           <div class="admin-panel-head">
             <h2>إدارة اللاعبين</h2>
           </div>
           <p class="muted">كل لاعب يستطيع لعب كل فئة/مستوى مرة واحدة فقط تلقائيًا. لمنح محاولة إضافية لفئة ومستوى معيّنين، اختر اللاعب أدناه.</p>
           <div class="table-wrap">
             <table class="admin-table" id="players-table">
-              <thead><tr><th>اللاعب</th><th>الأسئلة المحلولة</th><th>إجابات صحيحة</th><th>إجابات خاطئة</th><th>نسبة الصحة</th><th>النقاط</th><th>الاختبارات</th><th>منح محاولة إضافية</th></tr></thead>
+              <thead><tr><th>اللاعب</th><th>الأسئلة المحلولة</th><th>إجابات صحيحة</th><th>إجابات خاطئة</th><th>الأداء</th><th>نسبة الصحة</th><th>النقاط</th><th>الاختبارات</th><th>منح محاولة إضافية</th></tr></thead>
               <tbody id="players-tbody"></tbody>
             </table>
           </div>
@@ -576,9 +590,38 @@
           <div class="table-wrap">
             <table class="admin-table" id="games-table">
               <thead>
-                <tr><th>العنوان</th><th>الفئة</th><th>اللاعبون</th><th>الحالة</th><th></th></tr>
+                <tr><th>العنوان</th><th>الفئة</th><th>المالك</th><th>اللاعبون</th><th>الحالة</th><th></th></tr>
               </thead>
               <tbody id="games-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Sub Admins (main admin only) -->
+        <div class="admin-panel" id="panel-subadmins" data-role="admin">
+          <div class="admin-panel-head">
+            <h2>🧩 المشرفون الفرعيون</h2>
+            <button class="btn btn-primary" id="btn-new-subadmin">+ مشرف فرعي جديد</button>
+          </div>
+          <p class="muted">للمشرف الفرعي صلاحية إدارة الغرف الجماعية والأسئلة الخاصة بغرفه فقط، ولا يمكنه الوصول لأي إعدادات أخرى.</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="subadmins-table">
+              <thead><tr><th>اسم المستخدم</th><th>الحالة</th><th>تاريخ الإنشاء</th><th></th></tr></thead>
+              <tbody id="subadmins-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Activity Log (main admin only) -->
+        <div class="admin-panel" id="panel-activity" data-role="admin">
+          <div class="admin-panel-head">
+            <h2>🗒️ سجل نشاط المشرفين الفرعيين</h2>
+          </div>
+          <p class="muted">سجل بكل العمليات التي قام بها المشرفون الفرعيون — لا يمكن لأي مشرف فرعي حذفه أو تعديله.</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="activity-table">
+              <thead><tr><th>المشرف</th><th>العملية</th><th>الغرفة</th><th>السؤال</th><th>التاريخ والوقت</th></tr></thead>
+              <tbody id="activity-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -661,6 +704,10 @@
         <select id="qf-difficulty"><option value="easy">سهل</option><option value="medium">متوسط</option><option value="hard">صعب</option></select>
       </div>
     </div>
+    <div class="field" id="qf-room-field">
+      <label>الغرفة (اختياري — اتركه "عام" ليظهر السؤال ضمن بنك الفئة العام)</label>
+      <select id="qf-room"><option value="">🌐 عام (كل الغرف والاختبارات الفردية)</option></select>
+    </div>
     <div class="field-grid">
       <div class="field"><label>العمر الأدنى</label><input type="number" id="qf-age-min" value="5" required></div>
       <div class="field"><label>العمر الأقصى</label><input type="number" id="qf-age-max" value="99" required></div>
@@ -702,6 +749,43 @@
       <div class="field"><label>العمر الأدنى</label><input type="number" id="gf-age-min" value="5" required></div>
       <div class="field"><label>العمر الأقصى</label><input type="number" id="gf-age-max" value="99" required></div>
     </div>
+
+    <hr class="divider">
+    <p class="eyebrow">⚙️ إعدادات العشوائية الخاصة بهذه الغرفة</p>
+
+    <div class="toggle-row">
+      <label class="toggle-switch"><input type="checkbox" id="gf-shuffle-questions" checked><span class="toggle-slider"></span></label>
+      <div><strong>ترتيب عشوائي للأسئلة</strong><p class="muted">يحصل كل لاعب على ترتيب مختلف لأسئلة هذه الغرفة.</p></div>
+    </div>
+    <div class="toggle-row">
+      <label class="toggle-switch"><input type="checkbox" id="gf-shuffle-answers" checked><span class="toggle-slider"></span></label>
+      <div><strong>ترتيب عشوائي للإجابات</strong><p class="muted">تُخلط خيارات كل سؤال بشكل مستقل لكل لاعب.</p></div>
+    </div>
+    <div class="toggle-row">
+      <label class="toggle-switch"><input type="checkbox" id="gf-age-filter" checked><span class="toggle-slider"></span></label>
+      <div><strong>تصفية حسب الفئة العمرية</strong><p class="muted">إظهار الأسئلة المطابقة للعمر الأدنى والأقصى أعلاه فقط.</p></div>
+    </div>
+
+    <div class="field">
+      <label>أنواع الأسئلة المسموح بها في هذه الغرفة</label>
+      <div class="tf-radio-row" id="gf-allowed-types">
+        <label class="tf-radio"><input type="checkbox" value="multiple_choice" checked> اختيار من متعدد</label>
+        <label class="tf-radio"><input type="checkbox" value="true_false" checked> صح / خطأ</label>
+        <label class="tf-radio"><input type="checkbox" value="matching" checked> مطابقة</label>
+        <label class="tf-radio"><input type="checkbox" value="ordering" checked> ترتيب</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>توزيع نسب الصعوبة (تُترك 0 لتعطيل التوزيع واستخدام مستوى واحد ثابت)</label>
+      <div class="field-grid" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="field"><label>سهل %</label><input type="number" id="gf-dist-easy" min="0" max="100" value="0"></div>
+        <div class="field"><label>متوسط %</label><input type="number" id="gf-dist-medium" min="0" max="100" value="0"></div>
+        <div class="field"><label>صعب %</label><input type="number" id="gf-dist-hard" min="0" max="100" value="0"></div>
+      </div>
+      <span class="field-error" id="gf-dist-err"></span>
+    </div>
+
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="btn-cancel-game">إلغاء</button>
       <button type="submit" class="btn btn-primary">إنشاء الغرفة</button>
@@ -722,6 +806,21 @@
     <span class="field-error" id="atf-err"></span>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="btn-cancel-age-timer">إلغاء</button>
+      <button type="submit" class="btn btn-primary">حفظ</button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ MODAL: SUB ADMIN EDITOR ============ -->
+<div class="modal-overlay" id="modal-subadmin" hidden>
+  <form class="glass-card modal-card" id="form-subadmin">
+    <h3 id="subadmin-modal-title">مشرف فرعي جديد</h3>
+    <input type="hidden" id="saf-id">
+    <div class="field"><label>اسم المستخدم</label><input type="text" id="saf-username" required autocomplete="off"></div>
+    <div class="field"><label id="saf-pass-label">كلمة المرور</label><input type="password" id="saf-password" autocomplete="new-password" minlength="6"></div>
+    <span class="field-error" id="saf-err"></span>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-cancel-subadmin">إلغاء</button>
       <button type="submit" class="btn btn-primary">حفظ</button>
     </div>
   </form>
