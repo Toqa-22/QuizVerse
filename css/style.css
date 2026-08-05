@@ -552,6 +552,7 @@ a{color:var(--violet-dark)}
   .options-grid{grid-template-columns:1fr}
   .options-grid--tf{grid-template-columns:1fr 1fr}
   .field-grid{grid-template-columns:1fr}
+  .dist-grid{grid-template-columns:1fr 1fr}
   .age-grid{grid-template-columns:repeat(3,1fr)}
   .results-stats{gap:16px}
   .brand-text em{display:none}
@@ -561,6 +562,7 @@ a{color:var(--violet-dark)}
 }
 @media (max-width: 420px){
   .category-grid{grid-template-columns:1fr}
+  .dist-grid{grid-template-columns:1fr}
 }
 
 /* ---------------- admin tables: card layout under 720px (no horizontal scroll) ---------------- */
@@ -757,7 +759,7 @@ a{color:var(--violet-dark)}
 .mp-search-empty{color:var(--ink-2);text-align:center;padding:24px 0;font-weight:600}
 
 /* ---------------- admin: question type groups (صح/خطأ، مطابقة، ترتيب) ---------------- */
-.tf-radio-row{display:flex;gap:14px}
+.tf-radio-row{display:flex;gap:14px;flex-wrap:wrap}
 .tf-radio{
   flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;
   border-radius:var(--radius-md);background:var(--surface-tint);border:2.5px solid var(--border-soft);
