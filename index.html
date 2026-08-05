@@ -669,6 +669,16 @@
 
           <hr class="divider">
 
+          <h2>👥 الحد الأقصى للاعبين المسجّلين</h2>
+          <p class="muted">حدّد أقصى عدد لحسابات اللاعبين المسموح بإنشائها في كل المنصة. عند الوصول للعدد، تُغلق شاشة "إنشاء حساب" تلقائيًا أمام أي لاعب جديد حتى يُزيد المشرف الحد أو يُعطّله. اتركه 0 لعدم وضع أي حد أقصى.</p>
+          <div class="field-grid" style="align-items:end;max-width:480px">
+            <div class="field"><label>الحد الأقصى (0 = بلا حد)</label><input type="number" id="settings-max-players" min="0" value="0"></div>
+            <button type="button" class="btn btn-primary" id="btn-save-max-players" style="height:44px">حفظ الحد الأقصى</button>
+          </div>
+          <p class="muted" id="settings-max-players-count" style="margin-top:8px"></p>
+
+          <hr class="divider">
+
           <h2>🔐 حساب المشرف</h2>
           <p class="muted">حسابك محفوظ بشكل آمن في قاعدة البيانات، ولا توجد أي بيانات دخول مكتوبة داخل كود الموقع.</p>
           <form id="form-admin-password" class="profile-form" style="max-width:420px">
