@@ -607,6 +607,23 @@
             </div>
           </div>
 
+          <h2>🗂️ الفئات المعرفية</h2>
+          <p class="muted">أضف فئة معرفية جديدة كاملة (اسم + أيقونة) لتظهر فورًا في كل مكان بالتطبيق: شاشة اختيار الفئة للاعبين، إدارة الأسئلة، إنشاء الغرف الجماعية، واقتراحات اللاعبين. الفئات الأساسية الاثنتا عشرة لا يمكن حذفها.</p>
+          <form id="form-category" class="field-grid category-form-grid" style="align-items:end;margin-bottom:14px">
+            <div class="field"><label>الأيقونة</label><input type="text" id="cf-icon" placeholder="🗂️" maxlength="4" required></div>
+            <div class="field"><label>اسم الفئة</label><input type="text" id="cf-name" placeholder="مثال: الفلك" required></div>
+            <button type="submit" class="btn btn-primary">+ إضافة</button>
+          </form>
+          <span class="field-error" id="cf-err"></span>
+          <div class="table-wrap">
+            <table class="admin-table" id="categories-table">
+              <thead><tr><th>الأيقونة</th><th>اسم الفئة</th><th></th></tr></thead>
+              <tbody id="categories-tbody"></tbody>
+            </table>
+          </div>
+
+          <hr class="divider">
+
           <h2>⏱️ وقت السؤال حسب نوعه</h2>
           <p class="muted">حدّد مدة مستقلة بالثواني لكل نوع سؤال. عند بدء أي سؤال، يُستخدم مؤقت نوعه تلقائيًا (له الأولوية على مؤقت الفئة أو العمر)، ما يتيح مثلاً وقتًا أقصر لأسئلة صح/خطأ ووقتًا أطول لأسئلة الترتيب والمطابقة.</p>
           <div class="table-wrap">
