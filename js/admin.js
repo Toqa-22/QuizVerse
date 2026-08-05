@@ -60,6 +60,7 @@ const Admin = (function(){
     document.getElementById("btn-new-subadmin").addEventListener("click", () => openSubAdminModal());
     document.getElementById("form-subadmin").addEventListener("submit", onSaveSubAdmin);
     document.getElementById("btn-cancel-subadmin").addEventListener("click", () => closeModal("modal-subadmin"));
+    document.getElementById("btn-close-room-players").addEventListener("click", () => closeModal("modal-room-players"));
 
     populateCategorySelects();
   }
@@ -93,7 +94,7 @@ const Admin = (function(){
         applyRoleVisibility();
         goTo("screen-admin");
         switchPanel("panel-questions");
-        await Promise.all([renderQuestionsTable(), renderGamesTable()]);
+        await Promise.all([renderQuestionsTable(), renderGamesTable(), renderSuggestionsBadge()]);
         await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "تسجيل دخول" });
       } else {
         const result = await QV.adminLogin(username, pass);
@@ -109,7 +110,7 @@ const Admin = (function(){
         }
         goTo("screen-admin");
         switchPanel("panel-stats");
-        await Promise.all([renderStats(), renderQuestionsTable(), renderGamesTable(), renderSettingsTable(), renderPlayersTable(), renderAgeTimersTable(), renderSubAdminsTable(), renderActivityLogTable()]);
+        await Promise.all([renderStats(), renderQuestionsTable(), renderGamesTable(), renderSettingsTable(), renderPlayersTable(), renderAgeTimersTable(), renderSubAdminsTable(), renderActivityLogTable(), renderSuggestionsBadge()]);
       }
     }catch(err){
       errEl.textContent = err.message || "بيانات الدخول غير صحيحة، أو الحساب لا يملك صلاحية الدخول.";
@@ -172,6 +173,7 @@ const Admin = (function(){
     document.querySelectorAll(".admin-panel").forEach(p => p.classList.toggle("active", p.id === id));
     if (id === "panel-subadmins") renderSubAdminsTable();
     if (id === "panel-activity") renderActivityLogTable();
+    if (id === "panel-suggestions") renderSuggestionsTable();
   }
 
   /* ---------------- stats ---------------- */
@@ -385,6 +387,10 @@ const Admin = (function(){
       // الفرعيين حتى يرى كل مشرف فرعي أسئلته هو فقط
       room_id: document.getElementById("qf-room").value || null,
       owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
+      // أي سؤال يُحفظ من لوحة تحكم المشرف (سواء جديد، أو تعديل مباشر، أو
+      // "تعديل ثم قبول" لاقتراح لاعب) يصبح "مقبولاً" فورًا — فقط الاقتراحات
+      // التي لم يفتحها أي مشرف بعد تبقى بحالة "قيد المراجعة"
+      status: "approved",
       // نُصفّر حقول الأنواع الأخرى دائمًا حتى لا تبقى بيانات قديمة عالقة
       // عند تغيير نوع سؤال موجود مسبقًا
       option1: null, option2: null, option3: null, option4: null,
@@ -739,6 +745,10 @@ const Admin = (function(){
   let editingGames = [];
   async function renderGamesTable(){
     editingGames = await visibleGames();
+    // عدد اللاعبين المنضمين فعليًا الآن لكل غرفة (وليس الحد الأقصى المسموح فقط)
+    const counts = await Promise.all(editingGames.map(g => QV.getGamePlayers(g.id)));
+    editingGames.forEach((g, i) => { g._playerCount = counts[i].length; });
+
     const tbody = document.getElementById("games-tbody");
     const statusLabel = { waiting: "بانتظار البدء", started: "جارية", finished: "منتهية" };
     tbody.innerHTML = editingGames.map(g => `
@@ -746,11 +756,12 @@ const Admin = (function(){
         <td data-label="العنوان">${escapeHtml(g.title)}</td>
         <td data-label="الفئة">${catIcon(g.category)} ${catName(g.category)}</td>
         <td data-label="المالك">${g.owner_username ? "🧩 " + escapeHtml(g.owner_username) : "🛡️ المشرف الرئيسي"}</td>
-        <td data-label="اللاعبون">${g.max_players}</td>
+        <td data-label="اللاعبون">👥 ${g._playerCount} / ${g.max_players}</td>
         <td data-label="الحالة"><span class="mp-status ${g.status}">${statusLabel[g.status] || g.status}</span></td>
         <td class="table-actions" data-label="">
           ${g.status === "waiting" ? `<button data-start="${g.id}">بدء</button>` : ""}
           ${g.status === "started" ? `<button data-finish="${g.id}">إنهاء</button>` : ""}
+          <button data-view-players="${g.id}">👥 اللاعبون</button>
           <button data-allow-rejoin="${g.id}" data-room-title="${escapeHtml(g.title)}">🔓 سماح بالانضمام</button>
           <button data-del="${g.id}" class="danger">حذف</button>
         </td>
@@ -759,6 +770,7 @@ const Admin = (function(){
 
     tbody.querySelectorAll("[data-start]").forEach(b => b.addEventListener("click", () => setGameStatus(b.dataset.start, "started")));
     tbody.querySelectorAll("[data-finish]").forEach(b => b.addEventListener("click", () => setGameStatus(b.dataset.finish, "finished")));
+    tbody.querySelectorAll("[data-view-players]").forEach(b => b.addEventListener("click", () => openRoomPlayersModal(b.dataset.viewPlayers)));
     tbody.querySelectorAll("[data-allow-rejoin]").forEach(b => b.addEventListener("click", () => onGrantRoomRejoin(b.dataset.allowRejoin, b.dataset.roomTitle)));
     tbody.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => onDeleteGame(b.dataset.del)));
   }
@@ -1012,6 +1024,120 @@ const Admin = (function(){
         <td data-label="التاريخ والوقت">${formatLogDate(l.created_at)}</td>
       </tr>
     `).join("") : `<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">لا يوجد أي نشاط مسجّل بعد</td></tr>`;
+  }
+
+  /* ---------------- player-submitted question suggestions (both roles) ---------------- */
+  async function renderSuggestionsBadge(){
+    const list = await QV.getQuestionSuggestions();
+    const badge = document.getElementById("suggestions-badge");
+    if (!badge) return;
+    badge.hidden = list.length === 0;
+    badge.textContent = String(list.length);
+  }
+
+  async function renderSuggestionsTable(){
+    const list = await QV.getQuestionSuggestions();
+    await renderSuggestionsBadge();
+    const tbody = document.getElementById("suggestions-tbody");
+    const diffLabel = { easy: "سهل", medium: "متوسط", hard: "صعب" };
+    tbody.innerHTML = list.length ? list.map(q => `
+      <tr>
+        <td data-label="المرسل">👤 ${escapeHtml(q.suggested_by || "لاعب")}</td>
+        <td class="q-cell" data-label="السؤال">${escapeHtml(q.question)}</td>
+        <td data-label="النوع">${TYPE_LABELS[q.type] || TYPE_LABELS.multiple_choice}</td>
+        <td data-label="الفئة">${catIcon(q.category)} ${catName(q.category)}</td>
+        <td data-label="المستوى">${diffLabel[q.difficulty] || q.difficulty}</td>
+        <td class="table-actions" data-label="">
+          <button data-approve-sg="${q.id}">✅ قبول</button>
+          <button data-edit-sg="${q.id}">✏️ تعديل ثم قبول</button>
+          <button data-reject-sg="${q.id}" class="danger">❌ رفض</button>
+        </td>
+      </tr>
+    `).join("") : `<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">لا توجد اقتراحات جديدة حاليًا</td></tr>`;
+
+    tbody.querySelectorAll("[data-approve-sg]").forEach(b => b.addEventListener("click", () => onApproveSuggestion(b.dataset.approveSg, list)));
+    tbody.querySelectorAll("[data-edit-sg]").forEach(b => b.addEventListener("click", () => {
+      const q = list.find(x => x.id === b.dataset.editSg);
+      if (q) openQuestionModal(q); // نفس نموذج تعديل الأسئلة تمامًا — الحفظ يقبل الاقتراح تلقائيًا (status: "approved")
+    }));
+    tbody.querySelectorAll("[data-reject-sg]").forEach(b => b.addEventListener("click", () => onRejectSuggestion(b.dataset.rejectSg, list)));
+  }
+
+  async function onApproveSuggestion(id, list){
+    try{
+      await QV.approveQuestionSuggestion(id);
+      showToast("تم قبول السؤال وإضافته لبنك الأسئلة ✔");
+      await renderSuggestionsTable();
+      await renderQuestionsTable();
+      if (currentRole === "subadmin"){
+        const q = list.find(x => x.id === id);
+        await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "قبول اقتراح سؤال", questionInfo: q ? q.question.slice(0, 80) : null });
+      }
+    }catch(err){
+      showToast("تعذّر قبول الاقتراح");
+      console.error(err);
+    }
+  }
+
+  async function onRejectSuggestion(id, list){
+    if (!confirm("هل تريد رفض هذا الاقتراح نهائيًا؟ لن يمكن التراجع عن ذلك.")) return;
+    try{
+      const q = list.find(x => x.id === id);
+      await QV.deleteQuestion(id);
+      showToast("تم رفض الاقتراح");
+      await renderSuggestionsTable();
+      if (currentRole === "subadmin"){
+        await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "رفض اقتراح سؤال", questionInfo: q ? q.question.slice(0, 80) : null });
+      }
+    }catch(err){
+      showToast("تعذّر رفض الاقتراح");
+      console.error(err);
+    }
+  }
+
+  /* ---------------- room players: view + remove (both roles, scoped to visible rooms) ---------------- */
+  let currentPlayersGameId = null;
+
+  async function openRoomPlayersModal(gameId){
+    currentPlayersGameId = gameId;
+    const game = editingGames.find(g => g.id === gameId);
+    document.getElementById("room-players-modal-title").textContent = game ? `👥 لاعبو غرفة "${game.title}"` : "لاعبو الغرفة";
+    await renderRoomPlayersTable(gameId);
+    openModal("modal-room-players");
+  }
+
+  async function renderRoomPlayersTable(gameId){
+    const players = await QV.getGamePlayers(gameId);
+    document.getElementById("room-players-count").textContent = players.length;
+    const tbody = document.getElementById("room-players-tbody");
+    tbody.innerHTML = players.length ? players.map(p => `
+      <tr>
+        <td data-label="اللاعب">${p.avatar || "🙂"} ${escapeHtml(p.name || "لاعب")}</td>
+        <td data-label="العمر">${p.age || "—"}</td>
+        <td data-label="النقاط">${p.score || 0}</td>
+        <td data-label="الحالة">${p.finished_at ? "أنهى الاختبار ✔" : "لا يزال يلعب…"}</td>
+        <td class="table-actions" data-label=""><button data-remove-player="${p.user_id}" class="danger">❌ إزالة</button></td>
+      </tr>
+    `).join("") : `<tr><td colspan="5" class="muted" style="text-align:center;padding:20px">لا يوجد لاعبون في هذه الغرفة بعد</td></tr>`;
+
+    tbody.querySelectorAll("[data-remove-player]").forEach(b => b.addEventListener("click", () => onRemoveRoomPlayer(gameId, b.dataset.removePlayer)));
+  }
+
+  async function onRemoveRoomPlayer(gameId, userId){
+    if (!confirm("هل تريد إزالة هذا اللاعب من الغرفة؟ سيتمكن من الانضمام مجددًا لاحقًا إن سُمح له.")) return;
+    try{
+      await QV.removeGamePlayer(gameId, userId);
+      showToast("تم إزالة اللاعب من الغرفة");
+      await renderRoomPlayersTable(gameId);
+      await renderGamesTable();
+      if (currentRole === "subadmin"){
+        const g = editingGames.find(x => x.id === gameId);
+        await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "إزالة لاعب من غرفة", roomName: g ? g.title : null });
+      }
+    }catch(err){
+      showToast("تعذّر إزالة اللاعب");
+      console.error(err);
+    }
   }
 
   function escapeHtml(str){
