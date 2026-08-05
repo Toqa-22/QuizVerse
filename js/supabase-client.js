@@ -370,7 +370,22 @@ const QV = (function(){
       }
     }
 
-    const updated = await updateProfile(userId, patch);
+    let updated;
+    try{
+      updated = await updateProfile(userId, patch);
+    }catch(err){
+      // شبكة أمان: إن لم يُنفَّذ ملف SQL الذي يضيف عمود combo_last_played بعد
+      // (راجع sql/migrate_daily_replay.sql)، لا نريد أن يفشل حفظ النتيجة
+      // بالكامل (النقاط، الإحصائيات...) بسبب عمود واحد ناقص فقط — نعيد
+      // المحاولة بدون هذا الحقل تحديدًا، مع تحذير واضح في الـ console
+      if (/combo_last_played/i.test(err.message || "")){
+        console.warn("عمود combo_last_played غير موجود بعد في قاعدة البيانات — نفّذ sql/migrate_daily_replay.sql حتى تعمل ميزة \"محاولة جديدة كل يوم\" بشكل صحيح.", err);
+        const { combo_last_played, ...patchWithoutCombo } = patch;
+        updated = await updateProfile(userId, patchWithoutCombo);
+      } else {
+        throw err;
+      }
+    }
 
     await addGameHistory({
       user_id: userId, game_id: gameId || null, category: result.category,
@@ -671,23 +686,18 @@ const QV = (function(){
 
     let all;
     if (difficultyDistribution && limit){
-      // توزيع الأسئلة حسب نسب الصعوبة المحددة لهذه الغرفة (سهل/متوسط/صعب)
+      // توزيع الأسئلة حسب عدد أسئلة صريح لكل مستوى صعوبة (سهل/متوسط/صعب) —
+      // القيم هنا أعداد فعلية وليست نسبًا مئوية؛ يبني المشرف/المشرف الفرعي
+      // اختباره بدقة، مثال: 10 أسئلة كليًا → 4 سهل + 4 متوسط + 2 صعب
       const diffs = ["easy", "medium", "hard"];
-      const totalPct = diffs.reduce((s, d) => s + (Number(difficultyDistribution[d]) || 0), 0);
-      if (totalPct > 0){
+      const totalCount = diffs.reduce((s, d) => s + (Number(difficultyDistribution[d]) || 0), 0);
+      if (totalCount > 0){
         const parts = [];
-        let allocated = 0;
-        for (let i = 0; i < diffs.length; i++){
-          const d = diffs[i];
-          const pct = Number(difficultyDistribution[d]) || 0;
-          if (pct <= 0) continue;
-          const isLast = i === diffs.length - 1 || diffs.slice(i + 1).every(dd => !(Number(difficultyDistribution[dd]) > 0));
-          const count = isLast ? Math.max(0, limit - allocated) : Math.round(limit * pct / totalPct);
-          allocated += count;
-          if (count > 0){
-            const pool = shuffle((await fetchQuestionPool({ category, roomId, difficulty: d, ageMin, ageMax, allowedTypes })).slice());
-            parts.push(...pool.slice(0, count));
-          }
+        for (const d of diffs){
+          const count = Number(difficultyDistribution[d]) || 0;
+          if (count <= 0) continue;
+          const pool = shuffle((await fetchQuestionPool({ category, roomId, difficulty: d, ageMin, ageMax, allowedTypes })).slice());
+          parts.push(...pool.slice(0, count));
         }
         all = parts;
       } else {
