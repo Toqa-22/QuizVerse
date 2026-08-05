@@ -48,6 +48,15 @@ const Multiplayer = (function(){
     currentGame = games.find(g => g.id === gameId);
     if (!currentGame) return;
 
+    // يُسمح للاعب بإكمال أي غرفة مرة واحدة فقط، إلا إذا منحه المشرف إذن
+    // إعادة انضمام صريحًا لهذه الغرفة تحديدًا
+    const profile = await QV.getProfile(player.userId);
+    const allowed = await QV.canJoinRoom(profile, gameId);
+    if (!allowed){
+      showToast("لقد شاركت في هذه الغرفة من قبل — تواصل مع المشرف للسماح لك بالانضمام مجددًا.");
+      return;
+    }
+
     currentPlayerAge = ageGroupToRange(player.age).min;
     await QV.joinGame(gameId, { name: player.name, age: player.age, avatar: player.avatar, user_id: player.userId, score: 0 });
     goTo("screen-mp-room");
