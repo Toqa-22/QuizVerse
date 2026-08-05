@@ -49,6 +49,7 @@ const QV = (function(){
     timers: "qv_demo_category_timers", // { category: seconds }
     ageTimers: "qv_demo_age_timers",   // [{ id, min_age, max_age, time_seconds }]
     typeTimers: "qv_demo_type_timers", // { multiple_choice: seconds, true_false: seconds, matching: seconds, ordering: seconds }
+    customCategories: "qv_demo_custom_categories", // [{ id, name, icon }] فئات أضافها المشرف فوق الاثنتي عشرة الأساسية
     adminAccounts: "qv_demo_admin_accounts", // username(lowercase) -> { username, passwordHash } — نفس آلية bootstrap
     subAdmins: "qv_demo_sub_admins",  // username(lowercase) -> { id, username, passwordHash, active, created_at }
     activityLog: "qv_demo_activity_log", // مصفوفة بأحدث العمليات أولًا
@@ -496,6 +497,44 @@ const QV = (function(){
     const { error } = await client.from("app_settings").upsert({ key: "category_timers", value: clean });
     if (error) throw error;
     return clean;
+  }
+
+  /* ================= CUSTOM CATEGORIES (فئات معرفية يضيفها المشرف) =================
+     الفئات الاثنتا عشرة الأساسية معرّفة ثابتًا في js/quiz-data.js (QUIZ_CATEGORIES)
+     ولا تتغيّر. هذه الدوال تسمح للمشرف بإضافة فئات إضافية فوقها فقط، تُخزَّن في
+     app_settings (أو localStorage في الوضع التجريبي) وتُدمج تلقائيًا مع
+     QUIZ_CATEGORIES عند بدء التطبيق (راجع js/app.js) — بلا أي حاجة لتعديل
+     ملفات الكود. يبقى بإمكان المشرف حذف الفئات التي أضافها هو فقط. */
+  async function getCustomCategories(){
+    if (demoMode) return lsGet(LS_KEYS.customCategories, []);
+    const { data, error } = await client.from("app_settings").select("value").eq("key", "custom_categories").maybeSingle();
+    if (error || !data) return [];
+    return data.value || [];
+  }
+
+  async function addCategory({ name, icon }){
+    name = (name || "").trim();
+    icon = (icon || "").trim() || "🗂️";
+    if (!name) throw new Error("الرجاء كتابة اسم الفئة");
+    const custom = await getCustomCategories();
+    if (custom.some(c => c.name === name)) throw new Error("توجد فئة بهذا الاسم بالفعل");
+    // معرّف فريد تلقائي — لا حاجة لأن يكتبه المشرف يدويًا
+    const id = "custom_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const row = { id, name, icon };
+    const updated = [...custom, row];
+    if (demoMode){ lsSet(LS_KEYS.customCategories, updated); return row; }
+    const { error } = await client.from("app_settings").upsert({ key: "custom_categories", value: updated });
+    if (error) throw error;
+    return row;
+  }
+
+  async function deleteCategory(id){
+    if (!id || !String(id).startsWith("custom_")) throw new Error("لا يمكن حذف الفئات الأساسية في النظام");
+    const updated = (await getCustomCategories()).filter(c => c.id !== id);
+    if (demoMode){ lsSet(LS_KEYS.customCategories, updated); return true; }
+    const { error } = await client.from("app_settings").upsert({ key: "custom_categories", value: updated });
+    if (error) throw error;
+    return true;
   }
 
   /* ================= QUESTION-TYPE TIMER SETTINGS (مؤقت مستقل لكل نوع سؤال، بالثواني) =================
@@ -1210,5 +1249,6 @@ const QV = (function(){
     createSubAdmin, listSubAdmins, updateSubAdmin, setSubAdminActive, deleteSubAdmin, subAdminLogin,
     logActivity, getActivityLog, getGamesForOwner, getQuestionsForOwner,
     getQuestionSuggestions, approveQuestionSuggestion, removeGamePlayer,
+    getCustomCategories, addCategory, deleteCategory,
   };
 })();
