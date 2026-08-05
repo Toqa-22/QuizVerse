@@ -26,6 +26,7 @@ function goTo(screenId){
 const PLAYER_ONLY_SCREENS = new Set([
   "screen-categories", "screen-mp-list", "screen-mp-room", "screen-quiz",
   "screen-results", "screen-dashboard", "screen-profile", "screen-leaderboard", "screen-room-rankings",
+  "screen-suggest-question",
 ]);
 
 function guardedGoTo(screenId){
@@ -307,6 +308,10 @@ function initDashboardActions(){
   document.getElementById("btn-dash-profile").addEventListener("click", async () => {
     await renderProfile();
     guardedGoTo("screen-profile");
+  });
+  document.getElementById("btn-dash-suggest").addEventListener("click", () => {
+    resetSuggestForm();
+    guardedGoTo("screen-suggest-question");
   });
 }
 
@@ -602,6 +607,140 @@ function initBackButtons(){
   });
 }
 
+/* ---------------- suggest-a-question (player-submitted, admin-reviewed) ---------------- */
+let sgPairIdx = 0, sgItemIdx = 0;
+
+function initSuggestQuestion(){
+  const catSel = document.getElementById("sg-category");
+  catSel.innerHTML = QUIZ_CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join("");
+
+  document.getElementById("sg-type").addEventListener("change", (e) => applySgTypeUI(e.target.value));
+  document.getElementById("btn-sg-add-pair").addEventListener("click", () => addSgPairRow());
+  document.getElementById("btn-sg-add-item").addEventListener("click", () => addSgItemRow());
+  document.getElementById("form-suggest-question").addEventListener("submit", onSubmitSuggestion);
+}
+
+function resetSuggestForm(){
+  const form = document.getElementById("form-suggest-question");
+  form.reset();
+  document.getElementById("sg-err").textContent = "";
+  document.getElementById("sg-pairs-list").innerHTML = "";
+  document.getElementById("sg-items-list").innerHTML = "";
+  sgPairIdx = 0; sgItemIdx = 0;
+  addSgPairRow(); addSgPairRow();
+  addSgItemRow(); addSgItemRow(); addSgItemRow();
+  applySgTypeUI("multiple_choice");
+}
+
+function applySgTypeUI(type){
+  document.getElementById("sg-group-mc").hidden = type !== "multiple_choice";
+  document.getElementById("sg-group-tf").hidden = type !== "true_false";
+  document.getElementById("sg-group-matching").hidden = type !== "matching";
+  document.getElementById("sg-group-ordering").hidden = type !== "ordering";
+}
+
+function addSgPairRow(left, right){
+  const id = "sgp" + (sgPairIdx++);
+  const row = document.createElement("div");
+  row.className = "field-grid";
+  row.style.marginBottom = "8px";
+  row.innerHTML = `
+    <div class="field"><input placeholder="العنصر" id="${id}-l" value="${escapeHtml(left || "")}"></div>
+    <div class="field" style="display:flex;gap:6px">
+      <input placeholder="الإجابة الصحيحة له" id="${id}-r" value="${escapeHtml(right || "")}">
+      <button type="button" class="btn btn-ghost" data-remove-row>✖</button>
+    </div>
+  `;
+  row.querySelector("[data-remove-row]").addEventListener("click", () => row.remove());
+  document.getElementById("sg-pairs-list").appendChild(row);
+}
+
+function addSgItemRow(value){
+  const id = "sgi" + (sgItemIdx++);
+  const row = document.createElement("div");
+  row.className = "field";
+  row.style.display = "flex";
+  row.style.gap = "6px";
+  row.style.marginBottom = "8px";
+  row.innerHTML = `
+    <input placeholder="عنصر بالترتيب الصحيح" id="${id}" value="${escapeHtml(value || "")}" style="flex:1">
+    <button type="button" class="btn btn-ghost" data-remove-row>✖</button>
+  `;
+  row.querySelector("[data-remove-row]").addEventListener("click", () => row.remove());
+  document.getElementById("sg-items-list").appendChild(row);
+}
+
+async function onSubmitSuggestion(e){
+  e.preventDefault();
+  const errEl = document.getElementById("sg-err");
+  errEl.textContent = "";
+
+  const type = document.getElementById("sg-type").value;
+  const question = document.getElementById("sg-text").value.trim();
+  if (!question){
+    errEl.textContent = "الرجاء كتابة نص السؤال";
+    return;
+  }
+
+  const payload = {
+    type,
+    question,
+    category: document.getElementById("sg-category").value,
+    difficulty: document.querySelector('input[name="sg-level"]:checked').value,
+    age_min: 5, age_max: 99, points: 10, explanation: "",
+    // اقتراحات اللاعبين تُحفظ دائمًا بحالة "قيد المراجعة" — لن تظهر ضمن أي
+    // اختبار فعلي إطلاقًا حتى يوافق عليها المشرف أو أحد المشرفين الفرعيين
+    status: "pending",
+    suggested_by: AppState.profile ? AppState.profile.username : null,
+    option1: null, option2: null, option3: null, option4: null,
+    correct_answer: null, pairs: null, ordered_items: null,
+  };
+
+  if (type === "multiple_choice"){
+    payload.option1 = document.getElementById("sg-opt1").value.trim();
+    payload.option2 = document.getElementById("sg-opt2").value.trim();
+    payload.option3 = document.getElementById("sg-opt3").value.trim();
+    payload.option4 = document.getElementById("sg-opt4").value.trim();
+    if (!payload.option1 || !payload.option2 || !payload.option3 || !payload.option4){
+      errEl.textContent = "الرجاء تعبئة الخيارات الأربعة";
+      return;
+    }
+    payload.correct_answer = Number(document.getElementById("sg-correct").value);
+  } else if (type === "true_false"){
+    payload.option1 = "صح"; payload.option2 = "خطأ";
+    payload.correct_answer = Number(document.querySelector('input[name="sg-tf"]:checked').value);
+  } else if (type === "matching"){
+    const rows = Array.from(document.querySelectorAll("#sg-pairs-list .field-grid"));
+    const pairs = rows.map(r => ({
+      left: r.querySelector('[id$="-l"]').value.trim(),
+      right: r.querySelector('[id$="-r"]').value.trim(),
+    })).filter(p => p.left && p.right);
+    if (pairs.length < 2){
+      errEl.textContent = "أضف زوجين على الأقل للمطابقة";
+      return;
+    }
+    payload.pairs = pairs;
+  } else if (type === "ordering"){
+    const inputs = Array.from(document.querySelectorAll("#sg-items-list input"));
+    const items = inputs.map(i => i.value.trim()).filter(Boolean);
+    if (items.length < 2){
+      errEl.textContent = "أضف عنصرين على الأقل للترتيب";
+      return;
+    }
+    payload.ordered_items = items;
+  }
+
+  try{
+    await QV.saveQuestion(payload);
+    showToast("تم إرسال اقتراحك بنجاح! سيراجعه المشرف قريبًا 💡");
+    resetSuggestForm();
+    guardedGoTo("screen-dashboard");
+  }catch(err){
+    errEl.textContent = "حدث خطأ أثناء الإرسال، حاول مرة أخرى";
+    console.error(err);
+  }
+}
+
 function escapeHtml(str){
   const div = document.createElement("div");
   div.textContent = str == null ? "" : String(str);
@@ -625,6 +764,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initCategoryControls();
   initStartQuizButton();
   initResultsActions();
+  initSuggestQuestion();
   Leaderboard.init();
   Admin.init();
 
