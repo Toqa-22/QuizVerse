@@ -214,6 +214,26 @@
         </form>
 
         <hr class="divider">
+
+        <h3>🔊 إعدادات الصوت</h3>
+        <div class="toggle-row">
+          <label class="toggle-switch"><input type="checkbox" id="snd-sfx-toggle" checked><span class="toggle-slider"></span></label>
+          <div><strong>🔊 المؤثرات الصوتية</strong><p class="muted">أصوات النقر، الإجابات، العدّ التنازلي، والإنجازات.</p></div>
+        </div>
+        <div class="toggle-row">
+          <label class="toggle-switch"><input type="checkbox" id="snd-music-toggle"><span class="toggle-slider"></span></label>
+          <div><strong>🎵 الموسيقى الخلفية</strong><p class="muted">موسيقى هادئة تُشغَّل أثناء خوض الاختبار.</p></div>
+        </div>
+        <div class="field">
+          <label>🎚 مستوى صوت المؤثرات: <span id="snd-sfx-value">70%</span></label>
+          <input type="range" id="snd-sfx-volume" min="0" max="100" value="70" class="volume-slider">
+        </div>
+        <div class="field">
+          <label>🎚 مستوى صوت الموسيقى: <span id="snd-music-value">40%</span></label>
+          <input type="range" id="snd-music-volume" min="0" max="100" value="40" class="volume-slider">
+        </div>
+
+        <hr class="divider">
         <button class="btn btn-ghost btn-block" id="btn-logout">🚪 تسجيل الخروج</button>
       </div>
     </div>
@@ -397,11 +417,12 @@
       </div>
     </div>
 
-    <div class="glass-card question-card">
+    <div class="glass-card question-card" id="question-card">
       <p class="q-meta"><span id="q-category-badge"></span></p>
       <h2 class="q-text" id="q-text">نص السؤال هنا</h2>
       <div class="options-grid" id="options-grid"><!-- injected --></div>
       <button type="button" class="btn btn-primary btn-block btn-check-answer" id="btn-check-answer" hidden>تحقق من الإجابة</button>
+      <div class="floating-layer" id="floating-layer" aria-hidden="true"></div>
     </div>
 
     <div class="feedback-panel" id="feedback-panel" hidden>
@@ -411,6 +432,21 @@
       <button class="btn btn-primary" id="btn-next-question">السؤال التالي ←</button>
     </div>
   </section>
+
+  <!-- ============ QUIZ COUNTDOWN OVERLAY (3, 2, 1, GO!) ============ -->
+  <div class="quiz-countdown-overlay" id="quiz-countdown-overlay" hidden>
+    <div class="quiz-countdown-number" id="quiz-countdown-number">3</div>
+  </div>
+
+  <!-- ============ LEVEL UP OVERLAY ============ -->
+  <div class="level-up-overlay" id="level-up-overlay" hidden>
+    <div class="level-up-card">
+      <div class="level-up-sparkles" aria-hidden="true">✨✨✨</div>
+      <div class="level-up-emoji" id="level-up-emoji">👑</div>
+      <p class="level-up-eyebrow">🎉 ترقية مستوى!</p>
+      <h2 class="level-up-title" id="level-up-title">عبقري</h2>
+    </div>
+  </div>
 
   <!-- ============ SCREEN: RESULTS ============ -->
   <section class="screen screen--results" id="screen-results">
