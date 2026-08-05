@@ -926,7 +926,10 @@ const QV = (function(){
   async function listSubAdmins(){
     if (demoMode) return Object.values(lsGet(LS_KEYS.subAdmins, {}));
     const { data, error } = await client.rpc("list_sub_admins");
-    if (error){ console.error(error); return []; }
+    // لا نُخفي الخطأ هنا بعد الآن — إخفاؤه كان يجعل القائمة تبدو فارغة بصمت
+    // حتى لو كانت المشكلة صلاحيات أو دالة RPC غير محدَّثة، بينما الحسابات
+    // موجودة فعليًا في قاعدة البيانات (نرميه ليظهر للمشرف عبر رسالة واضحة)
+    if (error){ console.error("listSubAdmins:", error); throw new Error(error.message || "تعذّر جلب قائمة المشرفين الفرعيين من قاعدة البيانات"); }
     // عمود التفعيل في مخططك الفعلي اسمه "enabled" — نطابقه هنا مع "active"
     // المستخدمة في بقية الواجهة حتى لا يتغيّر أي كود آخر في admin.js
     return (data || []).map(r => ({ id: r.id, username: r.username, active: r.enabled, created_at: r.created_at }));
