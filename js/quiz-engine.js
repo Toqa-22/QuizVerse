@@ -53,7 +53,7 @@ const QuizEngine = (function(){
     els.nextBtn = document.getElementById("btn-next-question");
   }
 
-  async function start({ category, difficulty, ageMin, ageMax, count, timePerQuestion, questions, excludeIds, onFinish }){
+  async function start({ category, difficulty, ageMin, ageMax, count, timePerQuestion, questions, excludeIds, onFinish, settingsOverride }){
     cacheEls();
     state.category = category;
     state.difficulty = difficulty;
@@ -64,7 +64,10 @@ const QuizEngine = (function(){
     state.answerTimes = [];
     state.timePerQuestion = timePerQuestion || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
     state.onFinish = onFinish;
-    state.settings = await QV.getQuizSettings();
+    // إعدادات عشوائية الاختبار: عامة من لوحة المشرف، مع إمكانية تجاوزها بإعدادات
+    // خاصة بغرفة جماعية محددة (راجع ميزة "إعدادات العشوائية لكل غرفة") دون أي
+    // تأثير على الاختبارات الفردية أو الغرف التي لا تملك إعدادات خاصة بها
+    state.settings = { ...(await QV.getQuizSettings()), ...(settingsOverride || {}) };
     // مؤقت كل نوع سؤال (إن حدّده المشرف) — يُجلب مرة واحدة لكامل الاختبار
     // ثم يُطبَّق تلقائيًا على كل سؤال حسب نوعه عند عرضه
     state.typeTimers = await QV.getQuestionTypeTimers();
