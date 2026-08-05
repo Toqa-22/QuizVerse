@@ -52,6 +52,40 @@ const Leaderboard = (function(){
     return null;
   }
 
+  /* ---------------- 🎲 لوحة التحدي العشوائي (منفصلة، أفضل نتيجة لكل لاعب) ---------------- */
+  async function renderRandomChallenge(){
+    const list = document.getElementById("rlb-list");
+    list.innerHTML = `<li class="lb-empty">جارٍ التحميل...</li>`;
+
+    const rows = await QV.getRandomChallengeLeaderboard();
+    if (!rows.length){
+      list.innerHTML = `<li class="lb-empty">لا توجد تحديات عشوائية مكتملة بعد — كن أول من يجرّبها! 🎲</li>`;
+      return;
+    }
+
+    const myId = QV.getCurrentUserId();
+    const visible = rows.slice(0, VISIBLE_TOP);
+    list.innerHTML = "";
+    visible.forEach(r => list.appendChild(buildRandomRow(r, r.id === myId)));
+  }
+
+  function buildRandomRow(r, isMe){
+    const li = document.createElement("li");
+    const medal = medalFor(r.rank);
+    li.className = "lb-row" + (r.rank <= 3 ? " top-3 rank-" + r.rank : "") + (isMe ? " is-me" : "");
+    const bestTime = r.random_challenge_best_avg_time != null ? `${r.random_challenge_best_avg_time}s` : "—";
+    li.innerHTML = `
+      <span class="lb-rank">${medal ? `<span class="lb-medal">${medal}</span>` : r.rank}</span>
+      <span class="lb-avatar">${r.avatar || (r.username || "?").charAt(0).toUpperCase()}</span>
+      <span class="lb-info">
+        <strong>${escapeHtml(r.username || "لاعب")}${isMe ? ' <span class="lb-you-tag">أنت</span>' : ""}</strong>
+        <span class="lb-substats">⏱️ أفضل وقت: ${bestTime} · 🎲 ${r.random_challenges_played || 0} تحدٍ مكتمل</span>
+      </span>
+      <span class="lb-score">${r.random_challenge_best_score || 0}<span class="lb-score-label">نقطة</span></span>
+    `;
+    return li;
+  }
+
   function buildRow(r, isMe){
     const li = document.createElement("li");
     const medal = medalFor(r.rank);
@@ -75,5 +109,5 @@ const Leaderboard = (function(){
     return div.innerHTML;
   }
 
-  return { init, render };
+  return { init, render, renderRandomChallenge };
 })();
