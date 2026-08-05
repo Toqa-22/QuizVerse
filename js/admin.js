@@ -6,10 +6,31 @@
 const Admin = (function(){
   let loggedIn = false;
   let currentAdminUsername = null;
+  // currentRole: "admin" (المشرف الرئيسي، كل الصلاحيات) أو "subadmin" (صلاحيات محدودة:
+  // إدارة الغرف الجماعية والأسئلة الخاصة بغرفه فقط — راجع "نظام المشرفين الفرعيين")
+  let currentRole = "admin";
+  let currentSubAdminId = null;
+  let selectedLoginRole = "admin";
+
+  // اللوحات المتاحة للمشرف الرئيسي فقط — يُمنع المشرف الفرعي من الوصول إليها
+  // حتى لو حاول تفعيلها يدويًا (حماية إضافية من جهة الواجهة، إلى جانب إخفاء
+  // أزرارها بالكامل من القائمة الجانبية)
+  const ADMIN_ONLY_PANELS = new Set(["panel-stats", "panel-settings", "panel-age-timers", "panel-players", "panel-subadmins", "panel-activity"]);
 
   function init(){
     document.getElementById("form-admin-login").addEventListener("submit", onLogin);
     document.getElementById("btn-admin-logout").addEventListener("click", logout);
+
+    document.querySelectorAll("#admin-role-tabs .role-tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll("#admin-role-tabs .role-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        selectedLoginRole = tab.dataset.role;
+        const isSub = selectedLoginRole === "subadmin";
+        document.getElementById("admin-login-eyebrow").textContent = isSub ? "دخول مشرف فرعي" : "دخول المشرف";
+        document.getElementById("admin-login-title").textContent = isSub ? "لوحة المشرف الفرعي" : "لوحة التحكم";
+      });
+    });
 
     document.querySelectorAll(".admin-nav-btn[data-panel]").forEach(btn => {
       btn.addEventListener("click", () => switchPanel(btn.dataset.panel));
@@ -36,6 +57,10 @@ const Admin = (function(){
     document.getElementById("btn-save-settings").addEventListener("click", onSaveSettings);
     document.getElementById("form-admin-password").addEventListener("submit", onChangeAdminPassword);
 
+    document.getElementById("btn-new-subadmin").addEventListener("click", () => openSubAdminModal());
+    document.getElementById("form-subadmin").addEventListener("submit", onSaveSubAdmin);
+    document.getElementById("btn-cancel-subadmin").addEventListener("click", () => closeModal("modal-subadmin"));
+
     populateCategorySelects();
   }
 
@@ -59,26 +84,64 @@ const Admin = (function(){
     const errEl = document.getElementById("admin-login-err");
     errEl.textContent = "";
     try{
-      const result = await QV.adminLogin(username, pass);
-      loggedIn = true;
-      currentAdminUsername = username;
-      if (result && result.bootstrapped){
-        showToast("تم إنشاء حساب المشرف الأول بنجاح ✔ احفظ بيانات الدخول جيدًا");
-      } else if (QV.isDemoMode){
-        showToast("تم الدخول في الوضع التجريبي المحلي ✦");
+      if (selectedLoginRole === "subadmin"){
+        const result = await QV.subAdminLogin(username, pass);
+        loggedIn = true;
+        currentRole = "subadmin";
+        currentAdminUsername = result.username;
+        currentSubAdminId = result.id;
+        applyRoleVisibility();
+        goTo("screen-admin");
+        switchPanel("panel-questions");
+        await Promise.all([renderQuestionsTable(), renderGamesTable()]);
+        await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "تسجيل دخول" });
+      } else {
+        const result = await QV.adminLogin(username, pass);
+        loggedIn = true;
+        currentRole = "admin";
+        currentAdminUsername = username;
+        currentSubAdminId = null;
+        applyRoleVisibility();
+        if (result && result.bootstrapped){
+          showToast("تم إنشاء حساب المشرف الأول بنجاح ✔ احفظ بيانات الدخول جيدًا");
+        } else if (QV.isDemoMode){
+          showToast("تم الدخول في الوضع التجريبي المحلي ✦");
+        }
+        goTo("screen-admin");
+        switchPanel("panel-stats");
+        await Promise.all([renderStats(), renderQuestionsTable(), renderGamesTable(), renderSettingsTable(), renderPlayersTable(), renderAgeTimersTable(), renderSubAdminsTable(), renderActivityLogTable()]);
       }
-      goTo("screen-admin");
-      switchPanel("panel-stats");
-      await Promise.all([renderStats(), renderQuestionsTable(), renderGamesTable(), renderSettingsTable(), renderPlayersTable(), renderAgeTimersTable()]);
     }catch(err){
-      errEl.textContent = "بيانات الدخول غير صحيحة، أو الحساب لا يملك صلاحية المشرف.";
+      errEl.textContent = err.message || "بيانات الدخول غير صحيحة، أو الحساب لا يملك صلاحية الدخول.";
     }
   }
 
   function logout(){
+    if (currentRole === "subadmin" && currentAdminUsername){
+      QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "تسجيل خروج" });
+    }
     loggedIn = false;
     currentAdminUsername = null;
+    currentRole = "admin";
+    currentSubAdminId = null;
+    document.querySelectorAll('[data-role="admin"]').forEach(el => { el.hidden = false; });
+    const badge = document.getElementById("admin-role-badge");
+    if (badge) badge.hidden = true;
     goTo("screen-welcome");
+  }
+
+  /* ---------------- إظهار/إخفاء عناصر الواجهة حسب الدور (مشرف رئيسي / مشرف فرعي) ---------------- */
+  function applyRoleVisibility(){
+    const isSub = currentRole === "subadmin";
+    document.querySelectorAll('[data-role="admin"]').forEach(el => { el.hidden = isSub; });
+    const badge = document.getElementById("admin-role-badge");
+    if (badge){
+      badge.hidden = !isSub;
+      badge.textContent = isSub ? `🧩 مشرف فرعي: ${currentAdminUsername}` : "";
+    }
+    // زر إنشاء سؤال جديد أو غرفة جديدة يبقى ظاهرًا لكليهما — فقط النطاق يختلف
+    document.getElementById("btn-new-question").hidden = false;
+    document.getElementById("btn-new-game").hidden = false;
   }
 
   async function onChangeAdminPassword(e){
@@ -102,8 +165,13 @@ const Admin = (function(){
   }
 
   function switchPanel(id){
+    // حماية إضافية من جهة الواجهة: لا يمكن لمشرف فرعي فتح لوحة مخصصة للمشرف
+    // الرئيسي فقط، حتى لو حاول استدعاء التبديل مباشرة
+    if (currentRole === "subadmin" && ADMIN_ONLY_PANELS.has(id)) id = "panel-questions";
     document.querySelectorAll(".admin-nav-btn[data-panel]").forEach(b => b.classList.toggle("active", b.dataset.panel === id));
     document.querySelectorAll(".admin-panel").forEach(p => p.classList.toggle("active", p.id === id));
+    if (id === "panel-subadmins") renderSubAdminsTable();
+    if (id === "panel-activity") renderActivityLogTable();
   }
 
   /* ---------------- stats ---------------- */
@@ -129,13 +197,25 @@ const Admin = (function(){
   };
 
   async function renderQuestionsTable(){
-    editingQuestions = await QV.getQuestions({});
+    const all = await QV.getQuestions({});
+    // المشرف الفرعي يرى فقط الأسئلة التي أنشأها هو (سواء عامة له أو مرتبطة بإحدى غرفه)؛
+    // المشرف الرئيسي يستمر برؤية كل الأسئلة كما هي العادة تمامًا دون أي تغيير
+    editingQuestions = currentRole === "subadmin" ? all.filter(q => q.owner_username === currentAdminUsername) : all;
+
+    const myGames = await visibleGames();
+    const roomTitle = (roomId) => {
+      if (!roomId) return "🌐 عام";
+      const g = myGames.find(x => x.id === roomId);
+      return g ? escapeHtml(g.title) : "غرفة محذوفة";
+    };
+
     const tbody = document.getElementById("questions-tbody");
     tbody.innerHTML = editingQuestions.map(q => `
       <tr>
         <td class="q-cell" data-label="السؤال">${escapeHtml(q.question)}</td>
         <td data-label="النوع">${TYPE_LABELS[q.type] || TYPE_LABELS.multiple_choice}</td>
         <td data-label="الفئة">${catIcon(q.category)} ${catName(q.category)}</td>
+        <td data-label="الغرفة">${roomTitle(q.room_id)}</td>
         <td data-label="العمر">${q.age_min}-${q.age_max}</td>
         <td data-label="الصعوبة">${{easy:"سهل",medium:"متوسط",hard:"صعب"}[q.difficulty] || q.difficulty}</td>
         <td data-label="النقاط">${q.points}</td>
@@ -144,10 +224,23 @@ const Admin = (function(){
           <button data-del="${q.id}" class="danger">حذف</button>
         </td>
       </tr>
-    `).join("") || `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">لا توجد أسئلة بعد</td></tr>`;
+    `).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">لا توجد أسئلة بعد</td></tr>`;
 
     tbody.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openQuestionModal(editingQuestions.find(q => q.id === b.dataset.edit))));
     tbody.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => onDeleteQuestion(b.dataset.del)));
+  }
+
+  /* الغرف المرئية للدور الحالي: كل الغرف للمشرف الرئيسي، وغرف المشرف الفرعي فقط له */
+  async function visibleGames(){
+    return currentRole === "subadmin" ? QV.getGamesForOwner(currentAdminUsername) : QV.getGames();
+  }
+
+  async function populateRoomSelect(selectedRoomId){
+    const games = await visibleGames();
+    const sel = document.getElementById("qf-room");
+    sel.innerHTML = `<option value="">🌐 عام (كل الغرف والاختبارات الفردية)</option>` +
+      games.map(g => `<option value="${g.id}">${escapeHtml(g.title)}</option>`).join("");
+    sel.value = selectedRoomId || "";
   }
 
   /* ---------------- إظهار/إخفاء حقول النموذج حسب نوع السؤال المختار ---------------- */
@@ -268,6 +361,7 @@ const Admin = (function(){
     document.getElementById("qf-age-max").value = q ? q.age_max : 99;
     document.getElementById("qf-points").value = q ? q.points : 10;
     document.getElementById("qf-explain").value = q ? (q.explanation || "") : "";
+    populateRoomSelect(q ? q.room_id : "");
     openModal("modal-question");
   }
 
@@ -286,6 +380,11 @@ const Admin = (function(){
       age_max: Number(document.getElementById("qf-age-max").value),
       points: Number(document.getElementById("qf-points").value),
       explanation: document.getElementById("qf-explain").value.trim(),
+      // الغرفة المرتبطة بهذا السؤال (اختياري) — تُترك فارغة ليبقى السؤال ضمن
+      // بنك الفئة العام كما كان دائمًا؛ ownership تُسجَّل فقط لأسئلة المشرفين
+      // الفرعيين حتى يرى كل مشرف فرعي أسئلته هو فقط
+      room_id: document.getElementById("qf-room").value || null,
+      owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
       // نُصفّر حقول الأنواع الأخرى دائمًا حتى لا تبقى بيانات قديمة عالقة
       // عند تغيير نوع سؤال موجود مسبقًا
       option1: null, option2: null, option3: null, option4: null,
@@ -295,6 +394,13 @@ const Admin = (function(){
     if (!payload.question){
       showToast("يجب كتابة نص السؤال");
       return;
+    }
+
+    // عند تعديل المشرف الرئيسي لسؤال أنشأه مشرف فرعي، نحافظ على ownership الأصلي
+    // بدل مسحه، حتى يستمر ذلك المشرف الفرعي برؤية سؤاله في لوحته كما هو متوقع
+    if (currentRole === "admin" && id){
+      const original = editingQuestions.find(q => q.id === id);
+      if (original && original.owner_username) payload.owner_username = original.owner_username;
     }
 
     if (type === "multiple_choice"){
@@ -364,10 +470,21 @@ const Admin = (function(){
     }
 
     try{
+      const isNew = !id;
       await QV.saveQuestion(payload);
       closeModal("modal-question");
       showToast("تم حفظ السؤال بنجاح ✔");
       await renderQuestionsTable();
+      if (currentRole === "subadmin"){
+        const games = await visibleGames();
+        const room = games.find(g => g.id === payload.room_id);
+        await QV.logActivity({
+          actorUsername: currentAdminUsername, actorRole: "subadmin",
+          action: isNew ? "إضافة سؤال" : "تعديل سؤال",
+          roomName: room ? room.title : null,
+          questionInfo: payload.question.slice(0, 80),
+        });
+      }
     }catch(err){
       showToast("حدث خطأ أثناء الحفظ");
       console.error(err);
@@ -376,9 +493,20 @@ const Admin = (function(){
 
   async function onDeleteQuestion(id){
     if (!confirm("هل تريد حذف هذا السؤال؟")) return;
+    const target = editingQuestions.find(q => q.id === id);
     await QV.deleteQuestion(id);
     showToast("تم حذف السؤال");
     await renderQuestionsTable();
+    if (currentRole === "subadmin" && target){
+      const games = await visibleGames();
+      const room = games.find(g => g.id === target.room_id);
+      await QV.logActivity({
+        actorUsername: currentAdminUsername, actorRole: "subadmin",
+        action: "حذف سؤال",
+        roomName: room ? room.title : null,
+        questionInfo: (target.question || "").slice(0, 80),
+      });
+    }
   }
 
   /* ---------------- settings: questions per category + timer per category + quiz behavior toggles ---------------- */
@@ -553,12 +681,26 @@ const Admin = (function(){
       const correct = p.correct_answers || 0;
       const wrong = p.wrong_answers || 0;
       const accuracy = answered > 0 ? Math.round((correct / answered) * 100) : 0;
+      const correctPct = answered > 0 ? Math.round((correct / answered) * 100) : 0;
+      const wrongPct = answered > 0 ? Math.round((wrong / answered) * 100) : 0;
       return `
       <tr>
         <td data-label="اللاعب">${p.avatar || ""} ${escapeHtml(p.username)}</td>
         <td data-label="الأسئلة المحلولة">${answered}</td>
         <td data-label="إجابات صحيحة">${correct}</td>
         <td data-label="إجابات خاطئة">${wrong}</td>
+        <td data-label="الأداء">
+          <div class="perf-bars">
+            <div class="perf-bar-row">
+              <div class="perf-bar-track"><div class="perf-bar-fill correct" style="width:${correctPct}%"></div></div>
+              <span class="perf-bar-label">${correctPct}%</span>
+            </div>
+            <div class="perf-bar-row">
+              <div class="perf-bar-track"><div class="perf-bar-fill wrong" style="width:${wrongPct}%"></div></div>
+              <span class="perf-bar-label">${wrongPct}%</span>
+            </div>
+          </div>
+        </td>
         <td data-label="نسبة الصحة">${accuracy}%</td>
         <td data-label="النقاط">${p.total_score || 0}</td>
         <td data-label="الاختبارات">${p.games_played || 0}</td>
@@ -575,7 +717,7 @@ const Admin = (function(){
         </td>
       </tr>
     `;
-    }).join("") : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون مسجّلون بعد</td></tr>`;
+    }).join("") : `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون مسجّلون بعد</td></tr>`;
 
     tbody.querySelectorAll("[data-grant-btn]").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -596,13 +738,14 @@ const Admin = (function(){
   /* ---------------- games ---------------- */
   let editingGames = [];
   async function renderGamesTable(){
-    editingGames = await QV.getGames();
+    editingGames = await visibleGames();
     const tbody = document.getElementById("games-tbody");
     const statusLabel = { waiting: "بانتظار البدء", started: "جارية", finished: "منتهية" };
     tbody.innerHTML = editingGames.map(g => `
       <tr>
         <td data-label="العنوان">${escapeHtml(g.title)}</td>
         <td data-label="الفئة">${catIcon(g.category)} ${catName(g.category)}</td>
+        <td data-label="المالك">${g.owner_username ? "🧩 " + escapeHtml(g.owner_username) : "🛡️ المشرف الرئيسي"}</td>
         <td data-label="اللاعبون">${g.max_players}</td>
         <td data-label="الحالة"><span class="mp-status ${g.status}">${statusLabel[g.status] || g.status}</span></td>
         <td class="table-actions" data-label="">
@@ -612,7 +755,7 @@ const Admin = (function(){
           <button data-del="${g.id}" class="danger">حذف</button>
         </td>
       </tr>
-    `).join("") || `<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">لا توجد غرف بعد</td></tr>`;
+    `).join("") || `<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">لا توجد غرف بعد</td></tr>`;
 
     tbody.querySelectorAll("[data-start]").forEach(b => b.addEventListener("click", () => setGameStatus(b.dataset.start, "started")));
     tbody.querySelectorAll("[data-finish]").forEach(b => b.addEventListener("click", () => setGameStatus(b.dataset.finish, "finished")));
@@ -633,10 +776,14 @@ const Admin = (function(){
 
   async function onDeleteGame(id){
     if (!confirm("هل تريد حذف هذه الغرفة نهائيًا؟ سيتم إخراج كل اللاعبين المنضمين إليها.")) return;
+    const target = editingGames.find(g => g.id === id);
     try{
       await QV.deleteGame(id);
       showToast("تم حذف الغرفة");
       await renderGamesTable();
+      if (currentRole === "subadmin" && target){
+        await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "حذف غرفة", roomName: target.title });
+      }
     }catch(err){
       showToast("تعذّر حذف الغرفة");
       console.error(err);
@@ -651,17 +798,39 @@ const Admin = (function(){
       // يُخلط بشكل مستقل في متصفح كل لاعب على حدة (لمنع الغش دون كسر العدالة).
       const game = editingGames.find(g => g.id === id);
       if (game){
-        const questionSet = await QV.getQuestions({
-          category: game.category,
-          ageMin: game.min_age, ageMax: game.max_age,
+        const rs = game.quiz_random_settings || {};
+        const useAgeFilter = rs.ageFilterEnabled !== false;
+        const buildOpts = {
+          ageMin: useAgeFilter ? game.min_age : null,
+          ageMax: useAgeFilter ? game.max_age : null,
           limit: game.question_count,
-        });
+          allowedTypes: rs.allowedTypes && rs.allowedTypes.length ? rs.allowedTypes : null,
+          difficultyDistribution: rs.difficultyDistribution || null,
+          settingsOverride: {
+            shuffleQuestions: rs.shuffleQuestions !== false,
+            preventRepetition: false, // مجموعة الغرفة موحّدة لكل اللاعبين، لا داعٍ لاستبعاد أسئلة أي لاعب بعينه
+          },
+        };
+        // أولوية لأسئلة هذه الغرفة تحديدًا إن أضافها المشرف الفرعي؛ وإلا رجوع
+        // تلقائي لبنك أسئلة الفئة المعرفية العام (السلوك الأصلي دون أي تغيير)
+        let questionSet = await QV.getQuestions({ ...buildOpts, roomId: game.id });
+        if (!questionSet.length){
+          questionSet = await QV.getQuestions({ ...buildOpts, category: game.category });
+        }
         patch.question_set = questionSet;
       }
     }
     await QV.saveGame(patch);
     showToast(status === "started" ? "بدأت اللعبة! سيتم إشعار جميع اللاعبين لحظيًا 🚀" : "تم إنهاء الغرفة");
     await renderGamesTable();
+    if (currentRole === "subadmin"){
+      const g = editingGames.find(x => x.id === id);
+      await QV.logActivity({
+        actorUsername: currentAdminUsername, actorRole: "subadmin",
+        action: status === "started" ? "بدء غرفة" : "إنهاء غرفة",
+        roomName: g ? g.title : null,
+      });
+    }
   }
 
   function openGameModal(){
@@ -671,6 +840,14 @@ const Admin = (function(){
     document.getElementById("gf-maxplayers").value = 20;
     document.getElementById("gf-age-min").value = 5;
     document.getElementById("gf-age-max").value = 99;
+    document.getElementById("gf-shuffle-questions").checked = true;
+    document.getElementById("gf-shuffle-answers").checked = true;
+    document.getElementById("gf-age-filter").checked = true;
+    document.querySelectorAll("#gf-allowed-types input[type=checkbox]").forEach(c => c.checked = true);
+    document.getElementById("gf-dist-easy").value = 0;
+    document.getElementById("gf-dist-medium").value = 0;
+    document.getElementById("gf-dist-hard").value = 0;
+    document.getElementById("gf-dist-err").textContent = "";
     applyGameTimerModeUI("custom");
     openModal("modal-game");
   }
@@ -682,6 +859,23 @@ const Admin = (function(){
   async function onSaveGame(e){
     e.preventDefault();
     const timerMode = document.querySelector('input[name="gf-timer-mode"]:checked').value;
+
+    const distEasy = Number(document.getElementById("gf-dist-easy").value) || 0;
+    const distMedium = Number(document.getElementById("gf-dist-medium").value) || 0;
+    const distHard = Number(document.getElementById("gf-dist-hard").value) || 0;
+    const distErrEl = document.getElementById("gf-dist-err");
+    distErrEl.textContent = "";
+    if (distEasy + distMedium + distHard > 100){
+      distErrEl.textContent = "مجموع نسب الصعوبة يجب ألا يتجاوز 100%";
+      return;
+    }
+
+    const allowedTypes = Array.from(document.querySelectorAll("#gf-allowed-types input[type=checkbox]:checked")).map(c => c.value);
+    if (!allowedTypes.length){
+      distErrEl.textContent = "يجب اختيار نوع سؤال واحد على الأقل";
+      return;
+    }
+
     const payload = {
       timer_mode: timerMode,
       time_per_question: timerMode === "age_based" ? 15 : Number(document.getElementById("gf-time").value),
@@ -694,16 +888,130 @@ const Admin = (function(){
       max_age: Number(document.getElementById("gf-age-max").value),
       status: "waiting",
       start_time: new Date().toISOString(),
+      // الغرفة تنتمي للمشرف الفرعي الذي أنشأها (إن وُجد)، ما يحصر إدارتها لاحقًا
+      // على صاحبها فقط — تبقى غرف المشرف الرئيسي بلا مالك كما كانت دائمًا
+      owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
+      // إعدادات العشوائية الخاصة بهذه الغرفة تحديدًا (ميزة #8)
+      quiz_random_settings: {
+        shuffleQuestions: document.getElementById("gf-shuffle-questions").checked,
+        shuffleAnswers: document.getElementById("gf-shuffle-answers").checked,
+        ageFilterEnabled: document.getElementById("gf-age-filter").checked,
+        allowedTypes,
+        difficultyDistribution: (distEasy + distMedium + distHard) > 0
+          ? { easy: distEasy, medium: distMedium, hard: distHard }
+          : null,
+      },
     };
     try{
       await QV.saveGame(payload);
       closeModal("modal-game");
       showToast("تم إنشاء الغرفة بنجاح ✔");
       await renderGamesTable();
+      if (currentRole === "subadmin"){
+        await QV.logActivity({ actorUsername: currentAdminUsername, actorRole: "subadmin", action: "إنشاء غرفة", roomName: payload.title });
+      }
     }catch(err){
       showToast("حدث خطأ أثناء إنشاء الغرفة");
       console.error(err);
     }
+  }
+
+  /* ---------------- sub admins (main admin only) ---------------- */
+  async function renderSubAdminsTable(){
+    if (currentRole !== "admin") return;
+    const subs = await QV.listSubAdmins();
+    const tbody = document.getElementById("subadmins-tbody");
+    tbody.innerHTML = subs.length ? subs.map(s => `
+      <tr>
+        <td data-label="اسم المستخدم">🧩 ${escapeHtml(s.username)}</td>
+        <td data-label="الحالة"><span class="mp-status ${s.active ? "started" : "finished"}">${s.active ? "مفعّل" : "موقوف"}</span></td>
+        <td data-label="تاريخ الإنشاء">${formatLogDate(s.created_at)}</td>
+        <td class="table-actions" data-label="">
+          <button data-edit-sub="${s.id}">تعديل</button>
+          <button data-toggle-sub="${s.id}" data-active="${s.active ? "1" : "0"}">${s.active ? "إيقاف" : "تفعيل"}</button>
+          <button data-del-sub="${s.id}" class="danger">حذف</button>
+        </td>
+      </tr>
+    `).join("") : `<tr><td colspan="4" class="muted" style="text-align:center;padding:24px">لا يوجد مشرفون فرعيون بعد</td></tr>`;
+
+    tbody.querySelectorAll("[data-edit-sub]").forEach(b => b.addEventListener("click", () => {
+      const s = subs.find(x => x.id === b.dataset.editSub);
+      openSubAdminModal(s);
+    }));
+    tbody.querySelectorAll("[data-toggle-sub]").forEach(b => b.addEventListener("click", async () => {
+      try{
+        await QV.setSubAdminActive(b.dataset.toggleSub, b.dataset.active !== "1");
+        showToast("تم تحديث حالة الحساب ✔");
+        await renderSubAdminsTable();
+      }catch(err){ showToast(err.message || "تعذّر تحديث الحالة"); }
+    }));
+    tbody.querySelectorAll("[data-del-sub]").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("هل تريد حذف هذا الحساب نهائيًا؟")) return;
+      try{
+        await QV.deleteSubAdmin(b.dataset.delSub);
+        showToast("تم حذف الحساب");
+        await renderSubAdminsTable();
+      }catch(err){ showToast(err.message || "تعذّر الحذف"); }
+    }));
+  }
+
+  function openSubAdminModal(s){
+    document.getElementById("subadmin-modal-title").textContent = s ? "تعديل مشرف فرعي" : "مشرف فرعي جديد";
+    document.getElementById("saf-id").value = s ? s.id : "";
+    document.getElementById("saf-username").value = s ? s.username : "";
+    document.getElementById("saf-password").value = "";
+    document.getElementById("saf-password").required = !s;
+    document.getElementById("saf-pass-label").textContent = s ? "كلمة مرور جديدة (اتركها فارغة للإبقاء عليها كما هي)" : "كلمة المرور";
+    document.getElementById("saf-err").textContent = "";
+    openModal("modal-subadmin");
+  }
+
+  async function onSaveSubAdmin(e){
+    e.preventDefault();
+    const errEl = document.getElementById("saf-err");
+    errEl.textContent = "";
+    const id = document.getElementById("saf-id").value || null;
+    const username = document.getElementById("saf-username").value.trim();
+    const password = document.getElementById("saf-password").value;
+
+    try{
+      if (id){
+        const patch = { username };
+        if (password) patch.password = password;
+        await QV.updateSubAdmin(id, patch);
+        showToast("تم تحديث بيانات المشرف الفرعي ✔");
+      } else {
+        await QV.createSubAdmin({ username, password });
+        showToast("تم إنشاء حساب المشرف الفرعي بنجاح ✔");
+      }
+      closeModal("modal-subadmin");
+      await renderSubAdminsTable();
+    }catch(err){
+      errEl.textContent = err.message || "تعذّر الحفظ";
+    }
+  }
+
+  /* ---------------- activity log (main admin only) ---------------- */
+  function formatLogDate(iso){
+    try{
+      const d = new Date(iso);
+      return d.toLocaleString("ar-EG", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    }catch(e){ return iso || ""; }
+  }
+
+  async function renderActivityLogTable(){
+    if (currentRole !== "admin") return;
+    const log = await QV.getActivityLog();
+    const tbody = document.getElementById("activity-tbody");
+    tbody.innerHTML = log.length ? log.map(l => `
+      <tr>
+        <td data-label="المشرف">🧩 ${escapeHtml(l.actor_username)}</td>
+        <td data-label="العملية">${escapeHtml(l.action)}</td>
+        <td data-label="الغرفة">${l.room_name ? escapeHtml(l.room_name) : "—"}</td>
+        <td data-label="السؤال">${l.question_info ? escapeHtml(l.question_info) : "—"}</td>
+        <td data-label="التاريخ والوقت">${formatLogDate(l.created_at)}</td>
+      </tr>
+    `).join("") : `<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">لا يوجد أي نشاط مسجّل بعد</td></tr>`;
   }
 
   function escapeHtml(str){
