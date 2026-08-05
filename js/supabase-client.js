@@ -749,21 +749,53 @@ const QV = (function(){
 
   /* يُحدَّث بعد كل اختبار جماعي لتنعكس نتيجة اللاعب فورًا في ترتيب الغرفة
      (أفضل 3 لاعبين داخل الغرفة، وشاشة "ترتيب الغرف" العامة) */
+  /* يُحدَّث بعد كل اختبار جماعي — يسجّل وقت أول إتمام (finished_at) مرة واحدة
+     فقط حتى لو استُدعيت الدالة لاحقًا لإضافة مكافأة (لا تتغيّر لحظة "الوصول"
+     الفعلية للاعب، وهذا أساس حساب ترتيب الفائزين الثلاثة الأوائل). */
   async function updateGamePlayerScore(gameId, userId, score){
     if (demoMode){
       const players = lsGet(LS_KEYS.players, {});
       const list = players[gameId] || [];
       const idx = list.findIndex(p => p.user_id === userId);
       if (idx !== -1){
-        list[idx] = { ...list[idx], score };
+        const finishedAt = list[idx].finished_at || new Date().toISOString();
+        list[idx] = { ...list[idx], score, finished_at: finishedAt };
         players[gameId] = list;
         lsSet(LS_KEYS.players, players);
       }
       return true;
     }
-    const { error } = await client.from("game_players").update({ score }).eq("game_id", gameId).eq("user_id", userId);
+    const { data: existing } = await client.from("game_players").select("finished_at").eq("game_id", gameId).eq("user_id", userId).maybeSingle();
+    const patch = { score };
+    if (!existing || !existing.finished_at) patch.finished_at = new Date().toISOString();
+    const { error } = await client.from("game_players").update(patch).eq("game_id", gameId).eq("user_id", userId);
     if (error) throw error;
     return true;
+  }
+
+  /* ================= LIVE PLAY: مكافأة الترتيب لأول 3 فائزين في الغرفة =================
+     تُحسب فور إتمام اللاعب اختباره، بناءً على ترتيبه الزمني الفعلي بين كل من
+     أكملوا هذه الغرفة حتى الآن (finished_at). لا حاجة لانتظار انتهاء الغرفة —
+     كل لاعب يعرف مكافأته لحظة إتمامه هو تحديدًا (يتوافق مع مبدأ "اللعب المباشر"). */
+  const ROOM_PLACEMENT_BONUS = { 1: 50, 2: 30, 3: 15 };
+
+  async function awardRoomPlacementBonus(gameId, userId){
+    const players = await getGamePlayers(gameId);
+    const finished = players
+      .filter(p => p.finished_at)
+      .sort((a, b) => new Date(a.finished_at) - new Date(b.finished_at));
+    const rank = finished.findIndex(p => p.user_id === userId) + 1;
+    const bonus = ROOM_PLACEMENT_BONUS[rank] || 0;
+    if (bonus <= 0) return 0;
+
+    const profile = await getProfile(userId);
+    if (!profile) return 0;
+    await updateProfile(userId, { total_score: (profile.total_score || 0) + bonus });
+
+    const player = players.find(p => p.user_id === userId);
+    if (player) await updateGamePlayerScore(gameId, userId, (player.score || 0) + bonus);
+
+    return bonus;
   }
 
   /* realtime channel subscription (no-op safe wrapper for demo mode) */
@@ -900,7 +932,7 @@ const QV = (function(){
 
     getQuestions, saveQuestion, deleteQuestion,
     getLeaderboard,
-    getGames, saveGame, deleteGame, joinGame, getGamePlayers, updateGamePlayerScore, subscribeToGame, unsubscribe,
+    getGames, saveGame, deleteGame, joinGame, getGamePlayers, updateGamePlayerScore, awardRoomPlacementBonus, subscribeToGame, unsubscribe,
     canPlay, grantReplay, getQuestionCounts, saveQuestionCounts,
     hasPlayedGame, canJoinRoom, grantRoomRejoin, grantRoomRejoinByUsername,
     getCategoryTimers, saveCategoryTimers,
