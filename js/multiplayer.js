@@ -231,6 +231,8 @@ const Multiplayer = (function(){
       : currentGame.time_per_question;
 
     goTo("screen-quiz");
+    await playQuizCountdown();
+    QVSound.startMusic();
     QuizEngine.start({
       category: currentGame.category,
       timePerQuestion,
