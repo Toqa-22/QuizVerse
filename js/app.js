@@ -259,6 +259,10 @@ async function renderDashboard(){
     ? `أكملت ${p.games_played} اختبارًا حتى الآن — استمر!`
     : "جاهز لأول تحدٍ معرفي لك؟";
 
+  // يخفي المشرف زر اقتراح الأسئلة عن لاعبين محدّدين (راجع إدارة اللاعبين ←
+  // "🔒 حظر الاقتراحات") — لا يؤثر على أي صلاحية أخرى للاعب إطلاقًا
+  document.getElementById("btn-dash-suggest").hidden = !!p.suggestions_locked;
+
   document.getElementById("dash-stats").innerHTML = `
     <div class="stat-card"><strong>${p.total_score || 0}</strong><span>🏆 إجمالي النقاط</span></div>
     <div class="stat-card"><strong>${rank ? "#" + rank : "—"}</strong><span>🥇 الترتيب الحالي</span></div>
@@ -304,6 +308,12 @@ function initDashboardActions(){
   document.getElementById("btn-dash-play").addEventListener("click", () => {
     renderCategories();
     guardedGoTo("screen-categories");
+  });
+  document.getElementById("btn-dash-group-play").addEventListener("click", () => {
+    const p = AppState.profile;
+    if (!p) return;
+    Multiplayer.renderList({ name: p.username, age: p.age, avatar: p.avatar, userId: p.id });
+    guardedGoTo("screen-mp-list");
   });
   document.getElementById("btn-dash-profile").addEventListener("click", async () => {
     await renderProfile();
@@ -410,28 +420,10 @@ function renderCategories(){
 }
 
 /* ---------------- start-quiz button (mode -> level -> category -> start) ---------------- */
-function updateModeVisibility(){
-  const isGroup = AppState.selectedMode === "multiplayer";
-  document.getElementById("level-category-head").hidden = isGroup;
-  document.getElementById("difficulty-card").hidden = isGroup;
-  document.getElementById("category-head").hidden = isGroup;
-  document.getElementById("category-grid").hidden = isGroup;
-  document.getElementById("btn-start-quiz-label").textContent = isGroup ? "تصفّح الغرف الجماعية" : "ابدأ الاختبار";
-}
-
 function updateStartQuizButtonState(){
   const btn = document.getElementById("btn-start-quiz");
   const hint = document.getElementById("start-quiz-hint");
   if (!btn) return;
-
-  updateModeVisibility();
-
-  // في نمط الجماعي: لا حاجة لاختيار فئة أو مستوى، الزر يأخذك مباشرة لتصفح الغرف
-  if (AppState.selectedMode === "multiplayer"){
-    btn.disabled = false;
-    hint.textContent = "اضغط للانتقال إلى الغرف الجماعية المتاحة";
-    return;
-  }
 
   if (!AppState.selectedCategory){
     btn.disabled = true;
@@ -453,12 +445,6 @@ function updateStartQuizButtonState(){
 function initStartQuizButton(){
   document.getElementById("btn-start-quiz").addEventListener("click", () => {
     QVSound.click();
-    if (AppState.selectedMode === "multiplayer"){
-      const p = AppState.profile;
-      Multiplayer.renderList({ name: p.username, age: p.age, avatar: p.avatar, userId: p.id });
-      guardedGoTo("screen-mp-list");
-      return;
-    }
     if (!AppState.selectedCategory) return;
     if (!QV.canPlay(AppState.profile, AppState.selectedCategory, AppState.selectedDifficulty)){
       showToast("لقد لعبت هذه الفئة بهذا المستوى اليوم بالفعل — ستُفتح تلقائيًا غدًا، أو تواصل مع المشرف لمنحك محاولة إضافية الآن.");
@@ -475,16 +461,6 @@ function initCategoryControls(){
       document.querySelectorAll(".diff-chip").forEach(c => c.setAttribute("aria-checked", "false"));
       chip.setAttribute("aria-checked", "true");
       AppState.selectedDifficulty = chip.dataset.diff;
-      QVSound.click();
-      updateStartQuizButtonState();
-    });
-  });
-
-  document.querySelectorAll(".mode-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      AppState.selectedMode = btn.dataset.mode;
       QVSound.click();
       updateStartQuizButtonState();
     });
@@ -675,6 +651,13 @@ async function onSubmitSuggestion(e){
   e.preventDefault();
   const errEl = document.getElementById("sg-err");
   errEl.textContent = "";
+
+  // شبكة أمان إضافية (إلى جانب إخفاء الزر في لوحة اللاعب): حتى لو وصل اللاعب
+  // لهذه الشاشة بأي طريقة بعد أن أوقف المشرف اقتراحاته، تُرفض المحاولة هنا أيضًا
+  if (AppState.profile && AppState.profile.suggestions_locked){
+    errEl.textContent = "تم إيقاف إمكانية إرسال اقتراحات الأسئلة لحسابك من قبل المشرف";
+    return;
+  }
 
   const type = document.getElementById("sg-type").value;
   const question = document.getElementById("sg-text").value.trim();
