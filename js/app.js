@@ -64,6 +64,7 @@ resizeConfettiCanvas();
 
 function fireConfettiBurst(count = 26){
   if (!ctx2d) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const colors = ["#6d5bff", "#ff5c8a", "#ffb020", "#00b6a2"];
   for (let i = 0; i < count; i++){
     confettiParticles.push({
@@ -112,6 +113,90 @@ function runConfetti(){
 /* ---------------- modal helpers ---------------- */
 function openModal(id){ document.getElementById(id).hidden = false; }
 function closeModal(id){ document.getElementById(id).hidden = true; }
+
+/* ---------------- quiz countdown (3, 2, 1, GO!) ---------------- */
+function prefersReducedMotion(){
+  return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function playQuizCountdown(){
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("quiz-countdown-overlay");
+    const numEl = document.getElementById("quiz-countdown-number");
+    if (!overlay || !numEl){ resolve(); return; }
+
+    // من يفضّلون تقليل الحركة: نتخطى العدّ التنازلي البصري بالكامل فورًا،
+    // بلا أي تأخير مصطنع، مع الإبقاء على الانتقال المباشر لبدء الاختبار
+    if (prefersReducedMotion()){ resolve(); return; }
+
+    overlay.hidden = false;
+    const steps = ["3", "2", "1", "GO!"];
+    let i = 0;
+    function showNext(){
+      numEl.textContent = steps[i];
+      numEl.classList.remove("quiz-countdown-number"); void numEl.offsetWidth;
+      numEl.classList.add("quiz-countdown-number");
+      if (steps[i] === "GO!") QVSound.go(); else QVSound.countdown();
+      i += 1;
+      if (i < steps.length){
+        setTimeout(showNext, 650);
+      } else {
+        setTimeout(() => { overlay.hidden = true; resolve(); }, 450);
+      }
+    }
+    showNext();
+  });
+}
+
+/* ---------------- level up popup ---------------- */
+function showLevelUpPopup(level){
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("level-up-overlay");
+    if (!overlay){ resolve(); return; }
+    document.getElementById("level-up-emoji").textContent = level.emoji;
+    document.getElementById("level-up-title").textContent = level.name;
+    overlay.hidden = false;
+    QVSound.levelUp();
+    const holdTime = prefersReducedMotion() ? 900 : 2200;
+    setTimeout(() => { overlay.hidden = true; resolve(); }, holdTime);
+  });
+}
+
+/* ---------------- sound settings (player settings page) ---------------- */
+function initSoundSettings(){
+  const s = QVSound.getSettings();
+  const sfxToggle = document.getElementById("snd-sfx-toggle");
+  const musicToggle = document.getElementById("snd-music-toggle");
+  const sfxSlider = document.getElementById("snd-sfx-volume");
+  const musicSlider = document.getElementById("snd-music-volume");
+  const sfxValue = document.getElementById("snd-sfx-value");
+  const musicValue = document.getElementById("snd-music-value");
+  if (!sfxToggle) return;
+
+  sfxToggle.checked = s.sfxEnabled;
+  musicToggle.checked = s.musicEnabled;
+  sfxSlider.value = Math.round(s.sfxVolume * 100);
+  musicSlider.value = Math.round(s.musicVolume * 100);
+  sfxValue.textContent = sfxSlider.value + "%";
+  musicValue.textContent = musicSlider.value + "%";
+
+  sfxToggle.addEventListener("change", () => {
+    QVSound.setSfxEnabled(sfxToggle.checked);
+    if (sfxToggle.checked) QVSound.click();
+  });
+  musicToggle.addEventListener("change", () => {
+    QVSound.setMusicEnabled(musicToggle.checked);
+  });
+  sfxSlider.addEventListener("input", () => {
+    sfxValue.textContent = sfxSlider.value + "%";
+    QVSound.setSfxVolume(Number(sfxSlider.value) / 100);
+  });
+  sfxSlider.addEventListener("change", () => QVSound.click());
+  musicSlider.addEventListener("input", () => {
+    musicValue.textContent = musicSlider.value + "%";
+    QVSound.setMusicVolume(Number(musicSlider.value) / 100);
+  });
+}
 
 /* ---------------- theme (تبديل بين المظهر الفاتح والداكن) ---------------- */
 function initTheme(){
@@ -470,7 +555,9 @@ function initCategoryControls(){
 /* ---------------- quiz flow ---------------- */
 async function startSoloQuiz(){
   goTo("screen-quiz");
+  await playQuizCountdown();
   QVSound.start();
+  QVSound.startMusic();
   const p = AppState.profile;
   const range = ageGroupToRange(p.age);
   const [counts, timePerQuestion] = await Promise.all([
@@ -491,10 +578,12 @@ async function startSoloQuiz(){
     age: range.min,
     onFinish: (result) => window.onQuizFinished(result, false),
   });
-  if (!ok) { renderCategories(); goTo("screen-categories"); }
+  if (!ok) { QVSound.stopMusic(); renderCategories(); goTo("screen-categories"); }
 }
 
 window.onQuizFinished = async function(result, isMultiplayer, gameId){
+  QVSound.stopMusic();
+
   // اللعب المباشر: مكافأة سرعة بسيطة تُضاف لنقاط الاختبار الجماعي بحسب
   // متوسط زمن الإجابة (كلما كان اللاعب أسرع زادت المكافأة) — لا تُطبَّق على
   // الاختبارات الفردية حتى لا يتغيّر نظام نقاطها الحالي إطلاقًا
@@ -502,6 +591,10 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
     const speedBonus = Math.max(0, Math.round((12 - result.avgTime) * 2));
     if (speedBonus > 0) result.score += speedBonus;
   }
+
+  // مستوى اللاعب *قبل* إضافة هذه النتيجة لنقاطه الإجمالية — للمقارنة بعد
+  // الحفظ ومعرفة إن كانت هذه النتيجة كافية لترقية مستواه
+  const levelBefore = AppState.profile ? QV.levelForScore(AppState.profile.total_score || 0).name : null;
 
   const level = QV.levelForScore(result.score);
   document.getElementById("results-level").textContent = level.name;
@@ -522,6 +615,15 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
     AppState.profile = profile;
     updateHeaderScore();
     updateStartQuizButtonState();
+
+    // ترقية المستوى: نقارن مستوى اللاعب قبل وبعد حفظ هذه النتيجة — إن تغيّر
+    // اسم المستوى (مبتدئ ← متعلم ← خبير ← عبقري) نعرض احتفال "ترقية مستوى"
+    const levelAfter = QV.levelForScore(profile.total_score || 0);
+    if (levelBefore && levelAfter.name !== levelBefore){
+      await showLevelUpPopup(levelAfter);
+      updateHeaderScore();
+    }
+
     if (isMultiplayer && gameId){
       // نحدّث نتيجة اللاعب داخل صف الغرفة نفسها لتنعكس فورًا في ترتيب أفضل
       // 3 لاعبين وفي شاشة "ترتيب الغرف"، ثم نحتسب مكافأة الترتيب الفوري:
@@ -540,7 +642,10 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
     }
     if (newlyUnlocked && newlyUnlocked.length){
       const names = newlyUnlocked.map(id => (QUIZVERSE_ACHIEVEMENTS.find(a => a.id === id) || {}).name).filter(Boolean);
-      if (names.length) setTimeout(() => showToast("إنجاز جديد مفتوح: " + names.join("، ") + " 🏅"), 1200);
+      if (names.length){
+        QVSound.achievement();
+        setTimeout(() => showToast("إنجاز جديد مفتوح: " + names.join("، ") + " 🏅"), 1200);
+      }
     }
   }catch(e){ console.warn("تعذّر حفظ النتيجة", e); }
 };
@@ -762,6 +867,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initStartQuizButton();
   initResultsActions();
   initSuggestQuestion();
+  initSoundSettings();
   Leaderboard.init();
   Admin.init();
 
