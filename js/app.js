@@ -26,7 +26,7 @@ function goTo(screenId){
 const PLAYER_ONLY_SCREENS = new Set([
   "screen-categories", "screen-mp-list", "screen-mp-room", "screen-quiz",
   "screen-results", "screen-dashboard", "screen-profile", "screen-leaderboard", "screen-room-rankings",
-  "screen-suggest-question",
+  "screen-suggest-question", "screen-random-rolling", "screen-random-preview", "screen-random-leaderboard",
 ]);
 
 function guardedGoTo(screenId){
@@ -408,6 +408,9 @@ function initDashboardActions(){
     resetSuggestForm();
     guardedGoTo("screen-suggest-question");
   });
+  document.getElementById("btn-dash-random-challenge").addEventListener("click", () => {
+    startRandomChallengeFlow();
+  });
 }
 
 /* ---------------- profile screen ---------------- */
@@ -432,7 +435,22 @@ async function renderProfile(){
   document.getElementById("profile-favcat").textContent = p.favorite_category ? (catIcon(p.favorite_category) + " " + catName(p.favorite_category)) : "لم يُحدَّد بعد";
   document.getElementById("pf-age-display").textContent = p.age || "—";
 
+  renderRandomChallengeStats(p);
   renderAchievements("profile-achievements", p, rank);
+}
+
+function renderRandomChallengeStats(p){
+  const grid = document.getElementById("rc-profile-stats");
+  if (!grid) return;
+  const bestCategory = p.random_challenge_best_category
+    ? `${catIcon(p.random_challenge_best_category)} ${catName(p.random_challenge_best_category)}`
+    : "—";
+  grid.innerHTML = `
+    <div class="stat-card"><strong>${p.random_challenges_played || 0}</strong><span>🎲 تحديات مكتملة</span></div>
+    <div class="stat-card"><strong>${p.random_challenges_won || 0}</strong><span>🏆 تحديات مربوحة</span></div>
+    <div class="stat-card"><strong>${p.random_challenge_best_score || 0}</strong><span>⭐ أفضل نتيجة</span></div>
+    <div class="stat-card"><strong>${bestCategory}</strong><span>📚 أفضل فئة</span></div>
+  `;
 }
 
 function initProfileForms(){
@@ -581,7 +599,106 @@ async function startSoloQuiz(){
   if (!ok) { QVSound.stopMusic(); renderCategories(); goTo("screen-categories"); }
 }
 
-window.onQuizFinished = async function(result, isMultiplayer, gameId){
+/* ---------------- 🎲 Random Challenge (فئة/مستوى/عدد أسئلة/مؤقت عشوائي بالكامل) ---------------- */
+const RANDOM_CHALLENGE_COUNT_OPTIONS = [5, 10, 15, 20];
+let currentRandomChallenge = null; // آخر تحدٍ عشوائي تم اختياره، بانتظار "ابدأ التحدي"
+
+/* يبني تحديًا عشوائيًا صالحًا فعليًا: فئة فيها أسئلة كافية لعمر اللاعب، مستوى
+   صعوبة متاح ضمن تلك الفئة (مع تراجع تلقائي لمستوى آخر إن لم يوجد عدد كافٍ)،
+   وعدد أسئلة من {5, 10, 15, 20} لا يتجاوز عدد الأسئلة المتوفرة فعلاً. */
+async function pickRandomChallenge(profile){
+  const range = ageGroupToRange(profile.age);
+  // نجلب كل الأسئلة المطابقة لعمر اللاعب مرة واحدة عبر كل الفئات، ثم نُجمّعها
+  // محليًا حسب الفئة/المستوى بدل تكرار الاستعلام لكل فئة على حدة
+  const allQuestions = await QV.getQuestions({ ageMin: range.min, ageMax: range.max });
+  if (!allQuestions.length) return null;
+
+  const byCategory = {};
+  allQuestions.forEach(q => {
+    byCategory[q.category] = byCategory[q.category] || {};
+    const d = q.difficulty || "medium";
+    byCategory[q.category][d] = (byCategory[q.category][d] || 0) + 1;
+  });
+
+  const eligibleCategories = QUIZ_CATEGORIES.filter(c => byCategory[c.id]);
+  if (!eligibleCategories.length) return null;
+
+  const category = QV.shuffle(eligibleCategories.slice())[0].id;
+  const diffCounts = byCategory[category];
+  const shuffledDiffs = QV.shuffle(["easy", "medium", "hard"]);
+  // نفضّل مستوى فيه 3 أسئلة على الأقل ليكون تحديًا معقولاً، وإلا أي مستوى
+  // متاح فيه سؤال واحد على الأقل (تراجع تلقائي كما هو مطلوب)
+  const difficulty = shuffledDiffs.find(d => (diffCounts[d] || 0) >= 3) || shuffledDiffs.find(d => (diffCounts[d] || 0) > 0);
+  if (!difficulty) return null;
+
+  const available = diffCounts[difficulty];
+  const validCounts = RANDOM_CHALLENGE_COUNT_OPTIONS.filter(n => n <= available);
+  const questionCount = validCounts.length ? QV.shuffle(validCounts.slice())[0] : available;
+
+  const timePerQuestion = await QV.resolveQuestionTimer({ age: range.min, category });
+
+  return { category, difficulty, questionCount, timePerQuestion, ageRange: range };
+}
+
+async function startRandomChallengeFlow(){
+  const p = AppState.profile;
+  if (!p) return;
+  guardedGoTo("screen-random-rolling");
+  QVSound.click();
+
+  // نُبقي حركة النرد الدوّارة ظاهرة لثانية واحدة على الأقل حتى لو كان
+  // اختيار التحدي فوريًا، حتى تبدو تجربة "البحث" طبيعية وليست قفزة مفاجئة
+  const [picked] = await Promise.all([
+    pickRandomChallenge(p),
+    new Promise(resolve => setTimeout(resolve, 1000)),
+  ]);
+
+  if (!picked){
+    showToast("لا توجد أسئلة كافية لبناء تحدٍ عشوائي لفئتك العمرية حاليًا");
+    await renderDashboard();
+    goTo("screen-dashboard");
+    return;
+  }
+
+  currentRandomChallenge = picked;
+  const diffLabel = { easy: "سهل", medium: "متوسط", hard: "صعب" }[picked.difficulty] || picked.difficulty;
+  document.getElementById("rc-preview-category").textContent = `${catIcon(picked.category)} ${catName(picked.category)}`;
+  document.getElementById("rc-preview-difficulty").textContent = diffLabel;
+  document.getElementById("rc-preview-count").textContent = `${picked.questionCount} سؤال`;
+  document.getElementById("rc-preview-time").textContent = `${picked.timePerQuestion} ثانية`;
+
+  goTo("screen-random-preview");
+}
+
+function initRandomChallenge(){
+  document.getElementById("btn-start-random-challenge").addEventListener("click", async () => {
+    if (!currentRandomChallenge) return;
+    const picked = currentRandomChallenge;
+    const p = AppState.profile;
+
+    goTo("screen-quiz");
+    await playQuizCountdown();
+    QVSound.start();
+    QVSound.startMusic();
+
+    const comboKey = picked.category + ":" + picked.difficulty;
+    const excludeIds = (p.recent_questions && p.recent_questions[comboKey]) || [];
+    const ok = await QuizEngine.start({
+      category: picked.category,
+      difficulty: picked.difficulty,
+      ageMin: picked.ageRange.min,
+      ageMax: picked.ageRange.max,
+      count: picked.questionCount,
+      excludeIds,
+      timePerQuestion: picked.timePerQuestion,
+      age: picked.ageRange.min,
+      onFinish: (result) => window.onQuizFinished(result, false, null, true),
+    });
+    if (!ok){ QVSound.stopMusic(); goTo("screen-dashboard"); }
+  });
+}
+
+window.onQuizFinished = async function(result, isMultiplayer, gameId, isRandomChallenge){
   QVSound.stopMusic();
 
   // اللعب المباشر: مكافأة سرعة بسيطة تُضاف لنقاط الاختبار الجماعي بحسب
@@ -590,6 +707,16 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
   if (isMultiplayer && gameId && result.correctCount > 0){
     const speedBonus = Math.max(0, Math.round((12 - result.avgTime) * 2));
     if (speedBonus > 0) result.score += speedBonus;
+  }
+
+  // 🎲 مكافأة التحدي العشوائي: +20% نقاط إضافية دائمًا عند إكماله، و+100 نقطة
+  // إضافية إن كانت كل الإجابات صحيحة (إتمام مثالي) — تُضاف فوق النقاط
+  // الأصلية تمامًا كمكافأة السرعة أعلاه، دون أي تعديل على طريقة احتسابها
+  let randomChallengeBonus = 0;
+  if (isRandomChallenge){
+    randomChallengeBonus = Math.round(result.score * 0.2);
+    if (result.total > 0 && result.correctCount === result.total) randomChallengeBonus += 100;
+    if (randomChallengeBonus > 0) result.score += randomChallengeBonus;
   }
 
   // مستوى اللاعب *قبل* إضافة هذه النتيجة لنقاطه الإجمالية — للمقارنة بعد
@@ -607,6 +734,9 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
   goTo("screen-results");
   if (result.score > 0) fireConfettiCelebration();
   QVSound.win();
+  if (randomChallengeBonus > 0){
+    setTimeout(() => showToast(`🎲 مكافأة التحدي العشوائي: +${randomChallengeBonus} نقطة إضافية!`), 900);
+  }
 
   try{
     const { profile, newlyUnlocked } = await QV.submitQuizResult({
@@ -616,9 +746,20 @@ window.onQuizFinished = async function(result, isMultiplayer, gameId){
     updateHeaderScore();
     updateStartQuizButtonState();
 
+    // إحصائيات وضع التحدي العشوائي منفصلة تمامًا — تُحدَّث فقط بعد نجاح حفظ
+    // النتيجة العادية أعلاه، ولا تؤثر على أي حقل آخر في الملف الشخصي
+    if (isRandomChallenge){
+      try{
+        AppState.profile = await QV.submitRandomChallengeResult(AppState.profile.id, {
+          score: result.score, correctCount: result.correctCount, total: result.total,
+          avgTime: result.avgTime, category: result.category,
+        });
+      }catch(e){ console.warn("تعذّر حفظ إحصائيات التحدي العشوائي", e); }
+    }
+
     // ترقية المستوى: نقارن مستوى اللاعب قبل وبعد حفظ هذه النتيجة — إن تغيّر
     // اسم المستوى (مبتدئ ← متعلم ← خبير ← عبقري) نعرض احتفال "ترقية مستوى"
-    const levelAfter = QV.levelForScore(profile.total_score || 0);
+    const levelAfter = QV.levelForScore(AppState.profile.total_score || 0);
     if (levelBefore && levelAfter.name !== levelBefore){
       await showLevelUpPopup(levelAfter);
       updateHeaderScore();
@@ -679,6 +820,10 @@ function initHeader(){
   document.getElementById("btn-header-leaderboard").addEventListener("click", async () => {
     guardedGoTo("screen-leaderboard");
     await Leaderboard.render();
+  });
+  document.getElementById("btn-header-random-leaderboard").addEventListener("click", async () => {
+    guardedGoTo("screen-random-leaderboard");
+    await Leaderboard.renderRandomChallenge();
   });
 }
 
@@ -868,6 +1013,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initResultsActions();
   initSuggestQuestion();
   initSoundSettings();
+  initRandomChallenge();
   Leaderboard.init();
   Admin.init();
 
