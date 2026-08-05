@@ -94,7 +94,7 @@ const QV = (function(){
       total_score: 0, level: "مبتدئ", games_played: 0, correct_answers: 0,
       wrong_answers: 0, total_questions_answered: 0,
       streak: 0, last_played_date: null, favorite_category: null,
-      achievements: [], completed_combos: [], replay_grants: {}, room_rejoin_grants: {}, combo_last_played: {},
+      achievements: [], completed_combos: [], replay_grants: {}, room_rejoin_grants: {}, combo_last_played: {}, suggestions_locked: false,
       recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
       created_at: new Date().toISOString(),
     };
@@ -422,6 +422,14 @@ const QV = (function(){
     const grants = { ...(profile.replay_grants || {}) };
     grants[key] = (grants[key] || 0) + 1;
     return updateProfile(userId, { replay_grants: grants });
+  }
+
+  /* ================= PLAYER SUGGESTION LOCK (منع لاعب محدد من اقتراح أسئلة) =================
+     يستخدمها المشرف/المشرف الفرعي من "👤 اللاعبون" لمنع لاعب بعينه من إرسال
+     اقتراحات أسئلة جديدة (مثلاً بعد إساءة استخدام الميزة)، دون التأثير على أي
+     صلاحية أخرى لحسابه (يبقى بإمكانه اللعب، عرض ملفه، تغيير كلمة مروره...). */
+  function setPlayerSuggestionsLocked(userId, locked){
+    return updateProfile(userId, { suggestions_locked: !!locked });
   }
 
   /* ================= ROOM JOIN RESTRICTIONS (مرة واحدة لكل غرفة جماعية) =================
@@ -1237,7 +1245,7 @@ const QV = (function(){
     getQuestions, saveQuestion, deleteQuestion,
     getLeaderboard,
     getGames, saveGame, deleteGame, joinGame, getGamePlayers, updateGamePlayerScore, awardRoomPlacementBonus, subscribeToGame, unsubscribe,
-    canPlay, grantReplay, getQuestionCounts, saveQuestionCounts,
+    canPlay, grantReplay, setPlayerSuggestionsLocked, getQuestionCounts, saveQuestionCounts,
     hasPlayedGame, canJoinRoom, grantRoomRejoin, grantRoomRejoinByUsername,
     getCategoryTimers, saveCategoryTimers,
     getQuestionTypeTimers, saveQuestionTypeTimers,
