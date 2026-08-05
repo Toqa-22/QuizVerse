@@ -31,8 +31,8 @@ const Multiplayer = (function(){
           <span class="mp-tag">${catIcon(g.category)} ${catName(g.category)} · ${g.question_count} أسئلة · ${g.timer_mode === "age_based" ? "⏱️ مؤقت حسب العمر" : g.time_per_question + "ث لكل سؤال"}</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <span class="mp-status ${g.status}">${statusLabel}</span>
-          <button class="btn btn-primary" data-join="${g.id}" ${g.status === "finished" ? "disabled" : ""}>انضمام</button>
+          <span class="mp-status ${g.status}">${g.status === "started" ? "🔴 مباشر الآن" : statusLabel}</span>
+          <button class="btn btn-primary" data-join="${g.id}" ${g.status === "finished" ? "disabled" : ""}>${g.status === "started" ? "انضم الآن" : "انضمام"}</button>
         </div>
       `;
       wrap.appendChild(el);
@@ -59,6 +59,17 @@ const Multiplayer = (function(){
 
     currentPlayerAge = ageGroupToRange(player.age).min;
     await QV.joinGame(gameId, { name: player.name, age: player.age, avatar: player.avatar, user_id: player.userId, score: 0 });
+
+    // "لعب مباشر": إن كانت الغرفة قد بدأت بالفعل، يدخل اللاعب الاختبار فورًا
+    // بدل الانتظار — بإمكان اللاعبين الانضمام في أي وقت طالما الغرفة لا تزال
+    // جارية (لم ينهِها المشرف بعد)
+    if (currentGame.status === "started"){
+      goTo("screen-mp-room");
+      await renderRoom();
+      launchGameQuiz();
+      return;
+    }
+
     goTo("screen-mp-room");
     renderRoom();
     watch();
