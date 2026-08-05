@@ -42,6 +42,7 @@
     <button class="icon-btn" id="btn-theme" title="تبديل المظهر" aria-label="تبديل المظهر">🌙</button>
     <button class="icon-btn" id="btn-header-room-rankings" title="ترتيب الغرف" aria-label="ترتيب الغرف">🏅</button>
     <button class="icon-btn" id="btn-header-leaderboard" title="لوحة المتصدرين" aria-label="لوحة المتصدرين">🏆</button>
+    <button class="icon-btn" id="btn-header-random-leaderboard" title="لوحة التحدي العشوائي" aria-label="لوحة التحدي العشوائي">🎲</button>
   </div>
 </header>
 
@@ -156,6 +157,7 @@
       <div class="dash-welcome-actions">
         <button class="btn btn-primary" id="btn-dash-play">🎯 العب الآن</button>
         <button class="btn btn-ghost" id="btn-dash-group-play">👥 اللعب الجماعي</button>
+        <button class="btn btn-random-challenge" id="btn-dash-random-challenge">🎲 تحدي عشوائي</button>
         <button class="btn btn-ghost" id="btn-dash-profile">👤 ملفي الشخصي</button>
         <button class="btn btn-ghost" id="btn-dash-suggest">💡 اقترح سؤالاً</button>
       </div>
@@ -236,6 +238,11 @@
         <hr class="divider">
         <button class="btn btn-ghost btn-block" id="btn-logout">🚪 تسجيل الخروج</button>
       </div>
+    </div>
+
+    <div class="glass-card" style="margin-top:16px">
+      <h3>🎲 إحصائيات التحدي العشوائي</h3>
+      <div class="stats-grid" id="rc-profile-stats"><!-- injected --></div>
     </div>
 
     <div class="glass-card" style="margin-top:16px">
@@ -502,6 +509,49 @@
       <p class="muted">ترتيب كل اللاعبين داخل كل غرفة — يبقى محفوظًا حتى يحذف المشرف الغرفة يدويًا</p>
     </div>
     <div id="room-rankings-list"><!-- injected --></div>
+  </section>
+
+  <!-- ============ SCREEN: RANDOM CHALLENGE — ROLLING ============ -->
+  <section class="screen screen--random-rolling" id="screen-random-rolling">
+    <div class="random-rolling-wrap">
+      <div class="random-rolling-dice" id="random-rolling-dice">🎲</div>
+      <h2 class="random-rolling-text">جارٍ الاختيار...</h2>
+      <p class="muted">نبحث عن فئة ومستوى مناسبين لك</p>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: RANDOM CHALLENGE — PREVIEW ============ -->
+  <section class="screen screen--random-preview" id="screen-random-preview">
+    <div class="screen-head" style="max-width:480px;margin-inline:auto">
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع للوحتي</button>
+    </div>
+    <div class="glass-card random-preview-card" style="max-width:480px;margin-inline:auto">
+      <div class="random-preview-dice">🎲</div>
+      <h2>تحدٍ <span class="accent">عشوائي</span></h2>
+      <dl class="random-preview-facts">
+        <div><dt>الفئة</dt><dd id="rc-preview-category">—</dd></div>
+        <div><dt>المستوى</dt><dd id="rc-preview-difficulty">—</dd></div>
+        <div><dt>عدد الأسئلة</dt><dd id="rc-preview-count">—</dd></div>
+        <div><dt>الوقت لكل سؤال</dt><dd id="rc-preview-time">—</dd></div>
+      </dl>
+      <div class="random-preview-reward">
+        <p>🎁 مكافأة التحدي العشوائي: <strong>+20% نقاط إضافية</strong></p>
+        <p>🌟 إتمام مثالي (كل الإجابات صحيحة): <strong>+100 نقطة إضافية</strong></p>
+      </div>
+      <button type="button" class="btn btn-random-challenge btn-block" id="btn-start-random-challenge">🎲 ابدأ التحدي</button>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: RANDOM CHALLENGE — LEADERBOARD ============ -->
+  <section class="screen screen--random-leaderboard" id="screen-random-leaderboard">
+    <div class="screen-head">
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع</button>
+      <h2>🎲 لوحة <span class="accent">التحدي العشوائي</span></h2>
+      <p class="muted">ترتيب اللاعبين حسب أفضل نتيجة في وضع التحدي العشوائي</p>
+    </div>
+    <div class="glass-card lb-card">
+      <ol class="lb-list" id="rlb-list"><!-- injected --></ol>
+    </div>
   </section>
 
   <!-- ============ SCREEN: ADMIN LOGIN ============ -->
