@@ -96,6 +96,9 @@ const QV = (function(){
       wrong_answers: 0, total_questions_answered: 0,
       streak: 0, last_played_date: null, favorite_category: null,
       achievements: [], completed_combos: [], replay_grants: {}, room_rejoin_grants: {}, combo_last_played: {}, suggestions_locked: false,
+      // إحصائيات وضع "🎲 التحدي العشوائي" — منفصلة تمامًا عن إحصائيات اللاعب العامة
+      random_challenges_played: 0, random_challenges_won: 0, random_challenge_perfect_count: 0,
+      random_challenge_best_score: 0, random_challenge_best_category: null, random_challenge_best_avg_time: null,
       recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
       created_at: new Date().toISOString(),
     };
@@ -147,7 +150,25 @@ const QV = (function(){
       lsSet(LS_KEYS.profiles, profiles);
     } else {
       const { error: insertErr } = await client.from("profiles").insert(profile);
-      if (insertErr) throw insertErr;
+      if (insertErr){
+        // شبكة أمان: إن لم يُنفَّذ ملف sql/migrate_random_challenge.sql بعد،
+        // لا نريد أن يفشل إنشاء الحساب بالكامل بسبب أعمدة إحصائيات "التحدي
+        // العشوائي" الناقصة فقط — نعيد المحاولة بدونها تحديدًا مع تحذير واضح
+        const randomChallengeFields = [
+          "random_challenges_played", "random_challenges_won", "random_challenge_perfect_count",
+          "random_challenge_best_score", "random_challenge_best_category", "random_challenge_best_avg_time",
+        ];
+        const isMissingRcColumn = randomChallengeFields.some(f => (insertErr.message || "").includes(f));
+        if (isMissingRcColumn){
+          console.warn("أعمدة إحصائيات التحدي العشوائي غير موجودة بعد في قاعدة البيانات — نفّذ sql/migrate_random_challenge.sql. تم إنشاء الحساب بدونها مؤقتًا.", insertErr);
+          const fallbackProfile = { ...profile };
+          randomChallengeFields.forEach(f => delete fallbackProfile[f]);
+          const { error: retryErr } = await client.from("profiles").insert(fallbackProfile);
+          if (retryErr) throw retryErr;
+        } else {
+          throw insertErr;
+        }
+      }
     }
 
     currentSession = { id, username };
@@ -854,6 +875,46 @@ const QV = (function(){
       .map((p, i) => ({ ...p, rank: i + 1 }));
   }
 
+  /* ================= 🎲 RANDOM CHALLENGE (تحدٍ عشوائي) =================
+     يُستدعى إضافيًا بعد submitQuizResult العادية تمامًا (دون أي تعديل عليها)،
+     لتحديث إحصائيات وضع التحدي العشوائي فقط: عدد المحاولات، عدد "الفوز" (نصف
+     الأسئلة صحيحة فأكثر)، عدد الإتمامات المثالية، وأفضل نتيجة محقَّقة (مع
+     الفئة والزمن المتوسط المرتبطين بها). */
+  async function submitRandomChallengeResult(userId, result){
+    const profile = await getProfile(userId);
+    if (!profile) throw new Error("اللاعب غير موجود");
+
+    const played = (profile.random_challenges_played || 0) + 1;
+    const isWin = result.total > 0 && (result.correctCount / result.total) >= 0.5;
+    const won = (profile.random_challenges_won || 0) + (isWin ? 1 : 0);
+    const isPerfect = result.total > 0 && result.correctCount === result.total;
+    const perfectCount = (profile.random_challenge_perfect_count || 0) + (isPerfect ? 1 : 0);
+
+    const patch = {
+      random_challenges_played: played,
+      random_challenges_won: won,
+      random_challenge_perfect_count: perfectCount,
+    };
+    if (result.score > (profile.random_challenge_best_score || 0)){
+      patch.random_challenge_best_score = result.score;
+      patch.random_challenge_best_category = result.category || null;
+      patch.random_challenge_best_avg_time = result.avgTime != null ? result.avgTime : null;
+    }
+    return updateProfile(userId, patch);
+  }
+
+  /* لوحة متصدرين منفصلة خاصة بوضع التحدي العشوائي فقط — مرتّبة حسب أفضل
+     نتيجة حقّقها كل لاعب في هذا الوضع تحديدًا (منفصلة تمامًا عن لوحة
+     المتصدرين العامة المرتّبة حسب إجمالي النقاط) */
+  async function getRandomChallengeLeaderboard(){
+    const profiles = await listAllProfiles();
+    return profiles
+      .filter(p => (p.random_challenges_played || 0) > 0)
+      .slice()
+      .sort((a, b) => (b.random_challenge_best_score || 0) - (a.random_challenge_best_score || 0))
+      .map((p, i) => ({ ...p, rank: i + 1 }));
+  }
+
   /* ================= GAMES (multiplayer) ================= */
   async function getGames(){
     if (demoMode) return lsGet(LS_KEYS.games, []);
@@ -1297,5 +1358,6 @@ const QV = (function(){
     getQuestionSuggestions, approveQuestionSuggestion, removeGamePlayer,
     getCustomCategories, addCategory, deleteCategory,
     getMaxTotalPlayers, saveMaxTotalPlayers,
+    submitRandomChallengeResult, getRandomChallengeLeaderboard,
   };
 })();
