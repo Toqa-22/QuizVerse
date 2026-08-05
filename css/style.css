@@ -736,6 +736,21 @@ a{color:var(--violet-dark)}
 .toggle-switch input:checked + .toggle-slider{background:var(--violet)}
 .toggle-switch input:checked + .toggle-slider::before{transform:translateX(-20px)}
 
+/* ---------------- sub admin / activity log / performance bars ---------------- */
+.admin-role-badge{
+  display:block;text-align:center;padding:8px 10px;margin-bottom:6px;border-radius:var(--radius-sm);
+  background:var(--surface-tint);border:2px solid var(--border-soft);font-weight:800;font-size:.78rem;color:var(--ink-2);
+}
+.admin-role-badge[hidden]{display:none}
+.perf-bars{display:flex;flex-direction:column;gap:4px;min-width:110px}
+.perf-bar-row{display:flex;align-items:center;gap:6px;font-size:.7rem;font-weight:700}
+.perf-bar-track{flex:1;height:8px;border-radius:var(--radius-pill);background:var(--surface-tint);border:1.5px solid var(--border-soft);overflow:hidden}
+.perf-bar-fill{height:100%;border-radius:var(--radius-pill)}
+.perf-bar-fill.correct{background:var(--green)}
+.perf-bar-fill.wrong{background:var(--error)}
+.perf-bar-label{width:34px;text-align:end;color:var(--ink-2);flex-shrink:0}
+.mp-search-empty{color:var(--ink-2);text-align:center;padding:24px 0;font-weight:600}
+
 /* ---------------- admin: question type groups (صح/خطأ، مطابقة، ترتيب) ---------------- */
 .tf-radio-row{display:flex;gap:14px}
 .tf-radio{
