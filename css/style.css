@@ -197,6 +197,7 @@ a{color:var(--violet-dark)}
 .field textarea{min-height:80px;resize:vertical}
 .field-error{color:var(--error);font-size:.8rem;min-height:1em;font-weight:700}
 .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.category-form-grid{grid-template-columns:100px 1fr auto}
 
 .age-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .age-chip{
@@ -552,6 +553,7 @@ a{color:var(--violet-dark)}
   .options-grid{grid-template-columns:1fr}
   .options-grid--tf{grid-template-columns:1fr 1fr}
   .field-grid{grid-template-columns:1fr}
+  .category-form-grid{grid-template-columns:1fr}
   .dist-grid{grid-template-columns:1fr 1fr}
   .age-grid{grid-template-columns:repeat(3,1fr)}
   .results-stats{gap:16px}
