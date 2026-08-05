@@ -68,8 +68,10 @@ const QV = (function(){
     let q = lsGet(LS_KEYS.questions, null);
     if (!q){
       // كل سؤال بلا نوع محدد (كل الأسئلة القديمة الحالية) يُعامَل تلقائيًا
-      // كسؤال "اختيار من متعدد" — لا تغيير في سلوكها إطلاقًا
-      q = DEMO_QUESTIONS.map((item, i) => ({ id: "demo-" + i, ...item, type: item.type || "multiple_choice" }));
+      // كسؤال "اختيار من متعدد" — لا تغيير في سلوكها إطلاقًا. وبالمثل، كل
+      // سؤال بلا حالة محددة يُعامَل كسؤال "مقبول" (approved) — تمامًا كسلوك
+      // كل الأسئلة الحالية قبل إضافة نظام "اقتراحات اللاعبين"
+      q = DEMO_QUESTIONS.map((item, i) => ({ id: "demo-" + i, ...item, type: item.type || "multiple_choice", status: item.status || "approved" }));
       lsSet(LS_KEYS.questions, q);
     }
     return q;
@@ -626,7 +628,27 @@ const QV = (function(){
     if (allowedTypes && allowedTypes.length){
       all = all.filter(q => allowedTypes.includes(q.type || "multiple_choice"));
     }
+    // الأسئلة التي اقترحها لاعبون ولم يوافق عليها المشرف بعد (status === "pending")
+    // تبقى مستبعدة تمامًا من أي بنك أسئلة فعلي (اختبار فردي، غرفة جماعية، أو
+    // حتى قائمة "الأسئلة" في لوحة التحكم) — تظهر فقط في لوحة "اقتراحات اللاعبين"
+    // المخصصة عبر getQuestionSuggestions أدناه، حتى تتم الموافقة عليها
+    all = all.filter(q => (q.status || "approved") !== "pending");
     return all;
+  }
+
+  /* اقتراحات الأسئلة التي أرسلها اللاعبون بانتظار مراجعة المشرف/المشرف الفرعي */
+  async function getQuestionSuggestions(){
+    if (demoMode){
+      return ensureDemoQuestions().filter(q => q.status === "pending");
+    }
+    const { data, error } = await client.from("questions").select("*").eq("status", "pending");
+    if (error){ console.error(error); return []; }
+    return data || [];
+  }
+
+  /* قبول اقتراح كما هو دون أي تعديل — يتحوّل فورًا لسؤال فعلي ضمن بنك الأسئلة */
+  function approveQuestionSuggestion(id){
+    return saveQuestion({ id, status: "approved" });
   }
 
   async function getQuestions({ category, ageMin, ageMax, difficulty, limit, excludeIds, roomId, allowedTypes, difficultyDistribution, settingsOverride } = {}){
@@ -788,6 +810,21 @@ const QV = (function(){
     const { data, error } = await client.from("game_players").select("*").eq("game_id", gameId);
     if (error){ console.error(error); return []; }
     return data;
+  }
+
+  /* إزالة لاعب من غرفة جماعية (يستخدمها المشرف الرئيسي أو المشرف الفرعي مالك
+     الغرفة من لوحة "الغرف الجماعية" ← "👥 اللاعبون") — يُخرج اللاعب من هذه
+     الغرفة تحديدًا فقط، ولا يمسّ حسابه أو نتائجه في أي غرفة أو اختبار آخر */
+  async function removeGamePlayer(gameId, userId){
+    if (demoMode){
+      const players = lsGet(LS_KEYS.players, {});
+      players[gameId] = (players[gameId] || []).filter(p => p.user_id !== userId);
+      lsSet(LS_KEYS.players, players);
+      return true;
+    }
+    const { error } = await client.from("game_players").delete().eq("game_id", gameId).eq("user_id", userId);
+    if (error) throw error;
+    return true;
   }
 
   /* يُحدَّث بعد كل اختبار جماعي لتنعكس نتيجة اللاعب فورًا في ترتيب الغرفة
@@ -1144,5 +1181,6 @@ const QV = (function(){
 
     createSubAdmin, listSubAdmins, updateSubAdmin, setSubAdminActive, deleteSubAdmin, subAdminLogin,
     logActivity, getActivityLog, getGamesForOwner, getQuestionsForOwner,
+    getQuestionSuggestions, approveQuestionSuggestion, removeGamePlayer,
   };
 })();
