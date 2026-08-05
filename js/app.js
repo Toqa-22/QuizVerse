@@ -512,6 +512,7 @@ async function startSoloQuiz(){
     count,
     excludeIds,
     timePerQuestion,
+    age: range.min,
     onFinish: (result) => window.onQuizFinished(result, false),
   });
   if (!ok) { renderCategories(); goTo("screen-categories"); }
