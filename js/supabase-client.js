@@ -50,6 +50,8 @@ const QV = (function(){
     ageTimers: "qv_demo_age_timers",   // [{ id, min_age, max_age, time_seconds }]
     typeTimers: "qv_demo_type_timers", // { multiple_choice: seconds, true_false: seconds, matching: seconds, ordering: seconds }
     adminAccounts: "qv_demo_admin_accounts", // username(lowercase) -> { username, passwordHash } — نفس آلية bootstrap
+    subAdmins: "qv_demo_sub_admins",  // username(lowercase) -> { id, username, passwordHash, active, created_at }
+    activityLog: "qv_demo_activity_log", // مصفوفة بأحدث العمليات أولًا
   };
 
   function lsGet(key, fallback){
@@ -593,28 +595,69 @@ const QV = (function(){
     return merged;
   }
 
-  /* ================= QUESTIONS ================= */
-  async function getQuestions({ category, ageMin, ageMax, difficulty, limit, excludeIds } = {}){
-    const settings = await getQuizSettings();
-
+  /* ================= QUESTIONS =================
+     امتدت الدالة لدعم "إعدادات العشوائية الخاصة بكل غرفة" (راجع ميزة #8): تصفية
+     بمعرّف غرفة محدد (roomId) بدلًا من الفئة، تقييد أنواع الأسئلة المسموحة
+     (allowedTypes)، توزيع نسب الصعوبة (difficultyDistribution)، وتجاوز مؤقت
+     لإعدادات العشوائية العامة (settingsOverride) — كل ذلك اختياري تمامًا، وأي
+     استدعاء بالطريقة القديمة (بدون هذه المعاملات) يعمل بالضبط كما كان من قبل. */
+  async function fetchQuestionPool({ category, roomId, difficulty, ageMin, ageMax, allowedTypes }){
     let all;
     if (demoMode){
       all = ensureDemoQuestions();
-      if (category) all = all.filter(q => q.category === category);
+      if (roomId) all = all.filter(q => q.room_id === roomId);
+      else if (category) all = all.filter(q => q.category === category);
       if (difficulty) all = all.filter(q => q.difficulty === difficulty);
       if (ageMin != null) all = all.filter(q => q.age_max >= ageMin);
       if (ageMax != null) all = all.filter(q => q.age_min <= ageMax);
     } else {
-      // نُصفّي الفئة/المستوى/العمر مباشرة عبر الاستعلام قبل الجلب لتبقى الاستعلامات سريعة
-      // حتى مع آلاف الأسئلة، ثم نطبّق الخلط/الاستبعاد على النتيجة المُصفّاة فقط
+      // نُصفّي الفئة/الغرفة/المستوى/العمر مباشرة عبر الاستعلام قبل الجلب لتبقى
+      // الاستعلامات سريعة حتى مع آلاف الأسئلة، ثم نطبّق الخلط/الاستبعاد لاحقًا
       let query = client.from("questions").select("*");
-      if (category) query = query.eq("category", category);
+      if (roomId) query = query.eq("room_id", roomId);
+      else if (category) query = query.eq("category", category);
       if (difficulty) query = query.eq("difficulty", difficulty);
       if (ageMin != null) query = query.gte("age_max", ageMin);
       if (ageMax != null) query = query.lte("age_min", ageMax);
       const { data, error } = await query;
       if (error){ console.error(error); return []; }
       all = data || [];
+    }
+    if (allowedTypes && allowedTypes.length){
+      all = all.filter(q => allowedTypes.includes(q.type || "multiple_choice"));
+    }
+    return all;
+  }
+
+  async function getQuestions({ category, ageMin, ageMax, difficulty, limit, excludeIds, roomId, allowedTypes, difficultyDistribution, settingsOverride } = {}){
+    const settings = { ...(await getQuizSettings()), ...(settingsOverride || {}) };
+
+    let all;
+    if (difficultyDistribution && limit){
+      // توزيع الأسئلة حسب نسب الصعوبة المحددة لهذه الغرفة (سهل/متوسط/صعب)
+      const diffs = ["easy", "medium", "hard"];
+      const totalPct = diffs.reduce((s, d) => s + (Number(difficultyDistribution[d]) || 0), 0);
+      if (totalPct > 0){
+        const parts = [];
+        let allocated = 0;
+        for (let i = 0; i < diffs.length; i++){
+          const d = diffs[i];
+          const pct = Number(difficultyDistribution[d]) || 0;
+          if (pct <= 0) continue;
+          const isLast = i === diffs.length - 1 || diffs.slice(i + 1).every(dd => !(Number(difficultyDistribution[dd]) > 0));
+          const count = isLast ? Math.max(0, limit - allocated) : Math.round(limit * pct / totalPct);
+          allocated += count;
+          if (count > 0){
+            const pool = shuffle((await fetchQuestionPool({ category, roomId, difficulty: d, ageMin, ageMax, allowedTypes })).slice());
+            parts.push(...pool.slice(0, count));
+          }
+        }
+        all = parts;
+      } else {
+        all = await fetchQuestionPool({ category, roomId, difficulty, ageMin, ageMax, allowedTypes });
+      }
+    } else {
+      all = await fetchQuestionPool({ category, roomId, difficulty, ageMin, ageMax, allowedTypes });
     }
 
     if (!settings.randomGeneration){
@@ -817,6 +860,163 @@ const QV = (function(){
     else if (client) client.removeChannel(channel);
   }
 
+  /* ================= SUB ADMIN ACCOUNTS (يُنشئها المشرف الرئيسي فقط) =================
+     صلاحيات محدودة: إدارة الغرف الجماعية والأسئلة الخاصة بغرفهم فقط. نفس آلية حماية
+     كلمة المرور المستخدمة لحساب المشرف الرئيسي أعلاه (بصمة + تحقق عبر RPC من جهة
+     الخادم في وضع Supabase الحقيقي)، دون أي تسجيل ذاتي — الإنشاء حصري للمشرف الرئيسي. */
+  async function createSubAdmin({ username, password }){
+    username = (username || "").trim();
+    if (!username || !password) throw new Error("الرجاء تعبئة جميع الحقول");
+    if (username.length < 3) throw new Error("اسم المستخدم قصير جدًا (3 أحرف على الأقل)");
+    if (password.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 أحرف");
+    const passwordHash = simpleHash(password);
+
+    if (demoMode){
+      const all = lsGet(LS_KEYS.subAdmins, {});
+      const key = username.toLowerCase();
+      if (all[key]) throw new Error("اسم المستخدم مستخدم بالفعل، جرّب اسمًا آخر");
+      const row = { id: newId("sub"), username, passwordHash, active: true, created_at: new Date().toISOString() };
+      all[key] = row;
+      lsSet(LS_KEYS.subAdmins, all);
+      return row;
+    }
+    const { data, error } = await client.rpc("create_sub_admin", { p_username: username, p_password_hash: passwordHash });
+    if (error) throw new Error(/مستخدم/.test(error.message) ? "اسم المستخدم مستخدم بالفعل، جرّب اسمًا آخر" : error.message);
+    // create_sub_admin يُعيد المعرّف (uuid) فقط في مخططك الفعلي — نبني الصف كاملاً هنا
+    return { id: data, username, active: true, created_at: new Date().toISOString() };
+  }
+
+  async function listSubAdmins(){
+    if (demoMode) return Object.values(lsGet(LS_KEYS.subAdmins, {}));
+    const { data, error } = await client.rpc("list_sub_admins");
+    if (error){ console.error(error); return []; }
+    // عمود التفعيل في مخططك الفعلي اسمه "enabled" — نطابقه هنا مع "active"
+    // المستخدمة في بقية الواجهة حتى لا يتغيّر أي كود آخر في admin.js
+    return (data || []).map(r => ({ id: r.id, username: r.username, active: r.enabled, created_at: r.created_at }));
+  }
+
+  async function updateSubAdmin(id, patch){
+    if (demoMode){
+      const all = lsGet(LS_KEYS.subAdmins, {});
+      const entry = Object.values(all).find(s => s.id === id);
+      if (!entry) throw new Error("الحساب غير موجود");
+      const oldKey = entry.username.toLowerCase();
+      if (patch.username){
+        const newKey = patch.username.trim().toLowerCase();
+        if (newKey !== oldKey && all[newKey]) throw new Error("اسم المستخدم مستخدم بالفعل");
+        entry.username = patch.username.trim();
+      }
+      if (patch.password){
+        if (patch.password.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 أحرف");
+        entry.passwordHash = simpleHash(patch.password);
+      }
+      if (patch.active !== undefined) entry.active = patch.active;
+      delete all[oldKey];
+      all[entry.username.toLowerCase()] = entry;
+      lsSet(LS_KEYS.subAdmins, all);
+      return entry;
+    }
+    // مخططك الفعلي يفصل التحديث على ثلاث دوال RPC مستقلة (بدل دالة واحدة موحّدة)،
+    // فنستدعي كل واحدة منها فقط عند الحاجة إليها
+    if (patch.username){
+      const { error } = await client.rpc("update_sub_admin_username", { p_id: id, p_new_username: patch.username.trim() });
+      if (error) throw new Error(/مستخدم/.test(error.message) ? "اسم المستخدم مستخدم بالفعل" : error.message);
+    }
+    if (patch.password){
+      if (patch.password.length < 6) throw new Error("كلمة المرور يجب ألا تقل عن 6 أحرف");
+      const { error } = await client.rpc("update_sub_admin_password", { p_id: id, p_new_hash: simpleHash(patch.password) });
+      if (error) throw error;
+    }
+    if (patch.active !== undefined){
+      const { error } = await client.rpc("set_sub_admin_enabled", { p_id: id, p_enabled: patch.active });
+      if (error) throw error;
+    }
+    return true;
+  }
+
+  function setSubAdminActive(id, active){ return updateSubAdmin(id, { active }); }
+
+  async function deleteSubAdmin(id){
+    if (demoMode){
+      const all = lsGet(LS_KEYS.subAdmins, {});
+      const key = Object.keys(all).find(k => all[k].id === id);
+      if (key) delete all[key];
+      lsSet(LS_KEYS.subAdmins, all);
+      return true;
+    }
+    const { error } = await client.rpc("delete_sub_admin", { p_id: id });
+    if (error) throw error;
+    return true;
+  }
+
+  async function subAdminLogin(username, password){
+    username = (username || "").trim();
+    if (!username || !password) throw new Error("الرجاء تعبئة جميع الحقول");
+    const passwordHash = simpleHash(password);
+
+    if (demoMode){
+      const all = lsGet(LS_KEYS.subAdmins, {});
+      const acc = all[username.toLowerCase()];
+      if (!acc || acc.passwordHash !== passwordHash) throw new Error("بيانات الدخول غير صحيحة");
+      if (!acc.active) throw new Error("تم إيقاف هذا الحساب من قبل المشرف الرئيسي");
+      return { id: acc.id, username: acc.username };
+    }
+    // verify_sub_admin_login يُعيد فقط { id, enabled } (بلا username) في مخططك
+    // الفعلي — نستخدم اسم المستخدم الذي أدخله المستخدم نفسه لبناء الجلسة
+    const { data, error } = await client.rpc("verify_sub_admin_login", { p_username: username, p_password_hash: passwordHash });
+    if (error) throw new Error("بيانات الدخول غير صحيحة");
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error("بيانات الدخول غير صحيحة");
+    if (row.enabled === false) throw new Error("تم إيقاف هذا الحساب من قبل المشرف الرئيسي");
+    return { id: row.id, username };
+  }
+
+  /* ================= ACTIVITY LOG (نشاط المشرفين الفرعيين) =================
+     يسجّل كل عملية مؤثرة (دخول/خروج/إنشاء غرفة/تعديل/حذف/إضافة سؤال...) ليراها
+     المشرف الرئيسي فقط. لا يملك أي مشرف فرعي صلاحية حذف أو تعديل هذا السجل. */
+  async function logActivity({ actorUsername, actorRole, action, roomName, questionInfo }){
+    const row = {
+      id: newId("log"),
+      actor_username: actorUsername || "—",
+      actor_role: actorRole || "subadmin",
+      action,
+      room_name: roomName || null,
+      question_info: questionInfo || null,
+      created_at: new Date().toISOString(),
+    };
+    if (demoMode){
+      const log = lsGet(LS_KEYS.activityLog, []);
+      log.unshift(row);
+      lsSet(LS_KEYS.activityLog, log.slice(0, 500));
+      return row;
+    }
+    const { error } = await client.from("activity_log").insert(row);
+    if (error) console.error(error);
+    return row;
+  }
+
+  async function getActivityLog(limit = 300){
+    if (demoMode) return lsGet(LS_KEYS.activityLog, []).slice(0, limit);
+    const { data, error } = await client.from("activity_log").select("*").order("created_at", { ascending: false }).limit(limit);
+    if (error){ console.error(error); return []; }
+    return data || [];
+  }
+
+  /* غرف مالكها مشرف فرعي محدد فقط — يُستخدم لتصفية لوحة "الغرف الجماعية" وقت
+     دخول مشرف فرعي، بينما يستمر المشرف الرئيسي برؤية كل الغرف كما هي العادة */
+  async function getGamesForOwner(ownerUsername){
+    const games = await getGames();
+    if (!ownerUsername) return games;
+    return games.filter(g => g.owner_username === ownerUsername);
+  }
+
+  /* أسئلة أنشأها مشرف فرعي محدد فقط (سواء عامة له أو مرتبطة بغرفة من غرفه) */
+  async function getQuestionsForOwner(ownerUsername){
+    const all = await getQuestions({});
+    if (!ownerUsername) return all;
+    return all.filter(q => q.owner_username === ownerUsername);
+  }
+
   /* ================= admin auth (حساب مشرف واحد ثابت، بلا بريد إلكتروني ولا Supabase Auth) ================= */
   /* ================= admin auth (حساب مشرف واحد محمي في قاعدة البيانات — بدون أي بيانات دخول
      مكتوبة في كود JavaScript). آلية التمهيد الذاتي: أول محاولة تسجيل دخول تُنشئ حساب المشرف
@@ -941,5 +1141,8 @@ const QV = (function(){
     getQuizSettings, saveQuizSettings,
     adminLogin, changeAdminPassword, getStats,
     levelForScore, shuffle,
+
+    createSubAdmin, listSubAdmins, updateSubAdmin, setSubAdminActive, deleteSubAdmin, subAdminLogin,
+    logActivity, getActivityLog, getGamesForOwner, getQuestionsForOwner,
   };
 })();
