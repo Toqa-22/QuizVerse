@@ -26,6 +26,9 @@ const QuizEngine = (function(){
     timePerQuestion: 15,
     currentTimePerQuestion: 15,
     typeTimers: null,
+    ageTimerSettings: null,
+    categoryTimers: null,
+    age: null,
     answerTimes: [],
     timerHandle: null,
     remaining: 15,
@@ -53,7 +56,7 @@ const QuizEngine = (function(){
     els.nextBtn = document.getElementById("btn-next-question");
   }
 
-  async function start({ category, difficulty, ageMin, ageMax, count, timePerQuestion, questions, excludeIds, onFinish, settingsOverride }){
+  async function start({ category, difficulty, ageMin, ageMax, count, timePerQuestion, age, questions, excludeIds, onFinish, settingsOverride }){
     cacheEls();
     state.category = category;
     state.difficulty = difficulty;
@@ -63,14 +66,24 @@ const QuizEngine = (function(){
     state.index = 0;
     state.answerTimes = [];
     state.timePerQuestion = timePerQuestion || QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
+    // عمر اللاعب الحالي (إن كان معلومًا) — أساس أولى أولويات مؤقت السؤال، راجع
+    // resolveTimerForType أدناه لشرح كامل ترتيب الأولوية
+    state.age = age != null ? age : null;
     state.onFinish = onFinish;
     // إعدادات عشوائية الاختبار: عامة من لوحة المشرف، مع إمكانية تجاوزها بإعدادات
     // خاصة بغرفة جماعية محددة (راجع ميزة "إعدادات العشوائية لكل غرفة") دون أي
     // تأثير على الاختبارات الفردية أو الغرف التي لا تملك إعدادات خاصة بها
     state.settings = { ...(await QV.getQuizSettings()), ...(settingsOverride || {}) };
-    // مؤقت كل نوع سؤال (إن حدّده المشرف) — يُجلب مرة واحدة لكامل الاختبار
-    // ثم يُطبَّق تلقائيًا على كل سؤال حسب نوعه عند عرضه
-    state.typeTimers = await QV.getQuestionTypeTimers();
+    // تُجلب كل إعدادات المؤقتات الثلاثة مرة واحدة لكامل الاختبار (عمر/نوع/فئة)
+    // ثم تُحسم الأولوية النهائية لكل سؤال عند عرضه عبر resolveTimerForType
+    const [typeTimers, ageTimerSettings, categoryTimers] = await Promise.all([
+      QV.getQuestionTypeTimers(),
+      QV.getAgeTimerSettings(),
+      QV.getCategoryTimers(),
+    ]);
+    state.typeTimers = typeTimers;
+    state.ageTimerSettings = ageTimerSettings;
+    state.categoryTimers = categoryTimers;
 
     if (questions){
       state.questions = questions;
@@ -91,6 +104,22 @@ const QuizEngine = (function(){
     return true;
   }
 
+  /* يحسم مؤقت سؤال محدد بالأولوية المطلوبة تمامًا:
+     1) مؤقت الفئة العمرية المطابقة لعمر اللاعب الحالي (إن كان عمره معلومًا
+        ووُجدت فئة عمرية مطابقة في إعدادات "⏱️ مؤقت الأعمار") — الأولوية الأولى
+     2) مؤقت نوع هذا السؤال تحديدًا (إن حدّده المشرف في "🎚️ إعدادات الاختبار")
+     3) مؤقت الفئة المعرفية للاختبار (إن حدّده المشرف)
+     4) القيمة الافتراضية لهذا الاختبار (مؤقت الغرفة المخصص أو الإعداد العام) */
+  function resolveTimerForType(type){
+    if (state.age != null && state.ageTimerSettings && state.ageTimerSettings.length){
+      const match = state.ageTimerSettings.find(s => state.age >= s.min_age && state.age <= s.max_age);
+      if (match) return match.time_seconds;
+    }
+    if (state.typeTimers && state.typeTimers[type]) return state.typeTimers[type];
+    if (state.categoryTimers && state.category && state.categoryTimers[state.category]) return state.categoryTimers[state.category];
+    return state.timePerQuestion;
+  }
+
   /* ---------------- عرض السؤال: يوجّه لدالة العرض المناسبة حسب النوع ---------------- */
   function renderQuestion(){
     els.feedbackPanel.hidden = true;
@@ -103,9 +132,9 @@ const QuizEngine = (function(){
     const q = state.questions[state.index];
     const type = q.type || "multiple_choice";
     state.currentType = type;
-    // مؤقت هذا السؤال تحديدًا: مؤقت النوع إن كان محددًا من المشرف، وإلا
-    // القيمة العامة المُحسوبة مسبقًا لهذا الاختبار (عمر/فئة/افتراضي)
-    state.currentTimePerQuestion = (state.typeTimers && state.typeTimers[type]) || state.timePerQuestion;
+    // مؤقت هذا السؤال تحديدًا: أولوية العمر، ثم النوع، ثم الفئة، ثم الافتراضي
+    // (راجع شرح الأولوية الكامل في دالة resolveTimerForType أعلاه)
+    state.currentTimePerQuestion = resolveTimerForType(type);
 
     els.counter.textContent = `${state.index + 1} / ${state.questions.length}`;
     els.progressFill.style.width = ((state.index) / state.questions.length * 100) + "%";
