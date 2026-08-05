@@ -492,7 +492,7 @@ const QV = (function(){
 
   async function saveQuestionCounts(counts){
     if (demoMode){ lsSet(LS_KEYS.settings, counts); return counts; }
-    const { error } = await client.from("app_settings").upsert({ key: "question_counts", value: counts });
+    const { error } = await client.from("app_settings").upsert({ key: "question_counts", value: counts }, { onConflict: "key" });
     if (error) throw error;
     return counts;
   }
@@ -513,7 +513,7 @@ const QV = (function(){
       clean[cat] = Number.isFinite(n) && n >= 1 ? n : QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
     });
     if (demoMode){ lsSet(LS_KEYS.timers, clean); return clean; }
-    const { error } = await client.from("app_settings").upsert({ key: "category_timers", value: clean });
+    const { error } = await client.from("app_settings").upsert({ key: "category_timers", value: clean }, { onConflict: "key" });
     if (error) throw error;
     return clean;
   }
@@ -542,7 +542,7 @@ const QV = (function(){
     const row = { id, name, icon };
     const updated = [...custom, row];
     if (demoMode){ lsSet(LS_KEYS.customCategories, updated); return row; }
-    const { error } = await client.from("app_settings").upsert({ key: "custom_categories", value: updated });
+    const { error } = await client.from("app_settings").upsert({ key: "custom_categories", value: updated }, { onConflict: "key" });
     if (error) throw error;
     return row;
   }
@@ -551,7 +551,7 @@ const QV = (function(){
     if (!id || !String(id).startsWith("custom_")) throw new Error("لا يمكن حذف الفئات الأساسية في النظام");
     const updated = (await getCustomCategories()).filter(c => c.id !== id);
     if (demoMode){ lsSet(LS_KEYS.customCategories, updated); return true; }
-    const { error } = await client.from("app_settings").upsert({ key: "custom_categories", value: updated });
+    const { error } = await client.from("app_settings").upsert({ key: "custom_categories", value: updated }, { onConflict: "key" });
     if (error) throw error;
     return true;
   }
@@ -580,7 +580,7 @@ const QV = (function(){
       clean[type] = Number.isFinite(n) && n >= 1 ? n : QUIZVERSE_CONFIG.DEFAULT_TIME_PER_QUESTION;
     });
     if (demoMode){ lsSet(LS_KEYS.typeTimers, clean); return clean; }
-    const { error } = await client.from("app_settings").upsert({ key: "type_timers", value: clean });
+    const { error } = await client.from("app_settings").upsert({ key: "type_timers", value: clean }, { onConflict: "key" });
     if (error) throw error;
     return clean;
   }
@@ -680,7 +680,7 @@ const QV = (function(){
   async function saveQuizSettings(settings){
     const merged = { ...DEFAULT_QUIZ_SETTINGS, ...settings };
     if (demoMode){ lsSet(LS_KEYS.quizSettings, merged); return merged; }
-    const { error } = await client.from("app_settings").upsert({ key: "quiz_settings", value: merged });
+    const { error } = await client.from("app_settings").upsert({ key: "quiz_settings", value: merged }, { onConflict: "key" });
     if (error) throw error;
     return merged;
   }
@@ -693,14 +693,21 @@ const QV = (function(){
   async function getMaxTotalPlayers(){
     if (demoMode) return lsGet(LS_KEYS.maxTotalPlayers, 0);
     const { data, error } = await client.from("app_settings").select("value").eq("key", "max_total_players").maybeSingle();
-    if (error || !data) return 0;
+    if (error){
+      // نُسجّل الخطأ الحقيقي بدل إخفائه بصمت — قد يعني ذلك وجود أكثر من صف
+      // بنفس المفتاح (من محاولات حفظ سابقة قبل إصلاح onConflict)، وفي هذه
+      // الحالة "maybeSingle" يرفض التنفيذ لأنه يتوقّع صفًا واحدًا كحد أقصى
+      console.error("getMaxTotalPlayers:", error);
+      return 0;
+    }
+    if (!data) return 0;
     return Number(data.value) || 0;
   }
 
   async function saveMaxTotalPlayers(n){
     const clean = Math.max(0, Math.floor(Number(n)) || 0);
     if (demoMode){ lsSet(LS_KEYS.maxTotalPlayers, clean); return clean; }
-    const { error } = await client.from("app_settings").upsert({ key: "max_total_players", value: clean });
+    const { error } = await client.from("app_settings").upsert({ key: "max_total_players", value: clean }, { onConflict: "key" });
     if (error) throw error;
     return clean;
   }
