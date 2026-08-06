@@ -43,6 +43,7 @@
     <button class="icon-btn" id="btn-header-room-rankings" title="ترتيب الغرف" aria-label="ترتيب الغرف">🏅</button>
     <button class="icon-btn" id="btn-header-leaderboard" title="لوحة المتصدرين" aria-label="لوحة المتصدرين">🏆</button>
     <button class="icon-btn" id="btn-header-random-leaderboard" title="لوحة التحدي العشوائي" aria-label="لوحة التحدي العشوائي">🎲</button>
+    <button class="icon-btn" id="btn-header-marathon-leaderboard" title="لوحة الماراثون" aria-label="لوحة الماراثون">🏁</button>
   </div>
 </header>
 
@@ -165,6 +166,26 @@
 
     <div class="stats-grid dash-stats" id="dash-stats"><!-- injected --></div>
 
+    <!-- 🏁 بطاقة إعلان الماراثون — تظهر فقط إن نشر المشرف ماراثونًا -->
+    <div class="marathon-announce-card" id="marathon-announce-card" hidden>
+      <div class="marathon-announce-glow" aria-hidden="true"></div>
+      <div class="marathon-announce-body">
+        <p class="marathon-announce-eyebrow" id="marathon-announce-eyebrow">🏁 ماراثون</p>
+        <h2 id="marathon-announce-title">اسم الماراثون</h2>
+        <p class="muted" id="marathon-announce-desc"></p>
+        <div class="marathon-announce-meta">
+          <div><span class="muted">يبدأ خلال</span><strong id="marathon-announce-countdown">00:00:00</strong></div>
+          <div><span class="muted">📅</span><strong id="marathon-announce-date">—</strong></div>
+          <div><span class="muted">👥 منضمّون</span><strong id="marathon-announce-players">0</strong></div>
+        </div>
+        <button type="button" class="btn btn-random-challenge btn-block" id="btn-marathon-join">🏁 انضم للماراثون</button>
+        <div class="marathon-already-joined" id="marathon-already-joined" hidden>
+          <p>✅ لقد شاركت في هذا الماراثون من قبل</p>
+          <div class="marathon-already-joined-stats" id="marathon-already-joined-stats"><!-- injected --></div>
+        </div>
+      </div>
+    </div>
+
     <div class="dash-columns">
       <div class="glass-card">
         <h3>🕒 آخر الاختبارات</h3>
@@ -243,6 +264,11 @@
     <div class="glass-card" style="margin-top:16px">
       <h3>🎲 إحصائيات التحدي العشوائي</h3>
       <div class="stats-grid" id="rc-profile-stats"><!-- injected --></div>
+    </div>
+
+    <div class="glass-card" style="margin-top:16px">
+      <h3>🏁 إحصائيات الماراثون</h3>
+      <div class="stats-grid" id="mar-profile-stats"><!-- injected --></div>
     </div>
 
     <div class="glass-card" style="margin-top:16px">
@@ -554,7 +580,115 @@
     </div>
   </section>
 
-  <!-- ============ SCREEN: ADMIN LOGIN ============ -->
+  <!-- ============ 🏁 MARATHON: WAITING ROOM ============ -->
+  <section class="screen screen--marathon-waiting" id="screen-marathon-waiting">
+    <div class="marathon-waiting-wrap glass-card">
+      <p class="eyebrow">🏁 غرفة انتظار الماراثون</p>
+      <h2 id="mw-title">اسم الماراثون</h2>
+      <p class="muted">في انتظار بدء الحدث...</p>
+      <div class="marathon-waiting-count">
+        <strong id="mw-players-count">0</strong>
+        <span>👥 لاعب منضمّ</span>
+      </div>
+      <div class="marathon-ready-badge">حالتك: جاهز ✅</div>
+      <p class="muted" id="mw-countdown-text">يبدأ خلال —</p>
+      <button class="btn btn-ghost" id="btn-marathon-leave-waiting">مغادرة</button>
+    </div>
+  </section>
+
+  <!-- ============ 🏁 MARATHON: GAMEPLAY ============ -->
+  <section class="screen screen--marathon-quiz" id="screen-marathon-quiz">
+    <div class="quiz-topbar">
+      <div class="quiz-progress">
+        <span id="mq-counter">سؤال 1</span>
+      </div>
+      <div class="timer-ring" id="mq-timer-ring">
+        <svg viewBox="0 0 60 60">
+          <circle cx="30" cy="30" r="26" class="timer-track"/>
+          <circle cx="30" cy="30" r="26" class="timer-arc" id="mq-timer-arc"/>
+        </svg>
+        <span id="mq-timer-value">15</span>
+      </div>
+    </div>
+
+    <div class="marathon-live-bar">
+      <span class="marathon-live-chip">🔥 صامد لـ <strong id="mq-streak">0</strong></span>
+      <span class="marathon-live-chip">🧮 أسئلة <strong id="mq-survived">0</strong></span>
+      <span class="marathon-live-chip marathon-live-chip--remaining">🔥 لاعبون متبقّون: <strong id="mq-remaining">—</strong></span>
+    </div>
+
+    <div class="glass-card question-card" id="mq-question-card">
+      <p class="q-meta"><span id="mq-category-badge"></span></p>
+      <h2 class="q-text" id="mq-text">نص السؤال هنا</h2>
+      <div class="options-grid" id="mq-options-grid"><!-- injected --></div>
+      <div class="floating-layer" id="mq-floating-layer" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <!-- ============ 🏁 MARATHON: ELIMINATED TRANSITION ============ -->
+  <section class="screen screen--marathon-eliminated" id="screen-marathon-eliminated">
+    <div class="marathon-eliminated-wrap">
+      <div class="marathon-eliminated-emoji">💀</div>
+      <h2>تم إقصاؤك</h2>
+      <p class="muted" id="me-summary">صمدت لعدد من الأسئلة — أحسنت المحاولة!</p>
+      <button class="btn btn-primary" id="btn-marathon-spectate">🏁 مشاهدة الماراثون مباشرةً</button>
+      <button class="btn btn-ghost" id="btn-marathon-eliminated-leave">مغادرة إلى لوحتي</button>
+    </div>
+  </section>
+
+  <!-- ============ 🏁 MARATHON: SPECTATOR MODE ============ -->
+  <section class="screen screen--marathon-spectator" id="screen-marathon-spectator">
+    <div class="screen-head">
+      <button class="btn-back" id="btn-marathon-spectator-leave">→ مغادرة المشاهدة</button>
+      <h2>🏁 ماراثون <span class="accent">مباشر</span></h2>
+    </div>
+    <div class="marathon-spectator-remaining">
+      <strong id="ms-remaining">0</strong>
+      <span>لاعبون متبقّون</span>
+    </div>
+    <div class="glass-card">
+      <h3>🏆 المتصدّرون الحاليون</h3>
+      <ol class="lb-list" id="ms-leaders-list"><!-- injected --></ol>
+    </div>
+  </section>
+
+  <!-- ============ 🏁 MARATHON: RESULTS ============ -->
+  <section class="screen screen--marathon-results" id="screen-marathon-results">
+    <div class="glass-card results-card" id="mr-card">
+      <div class="results-badge-wrap">
+        <span class="badge-ring"></span>
+        <span class="results-emoji" id="mr-emoji">🏁</span>
+      </div>
+      <h2 id="mr-title">انتهى الماراثون</h2>
+      <p class="muted" id="mr-subtitle"></p>
+      <div class="results-stats">
+        <div><strong id="mr-rank">—</strong><span>الترتيب</span></div>
+        <div><strong id="mr-answered">0</strong><span>أسئلة مُجابة</span></div>
+        <div><strong id="mr-correct">0</strong><span>إجابات صحيحة</span></div>
+        <div><strong id="mr-streak">0</strong><span>أعلى سلسلة صمود</span></div>
+        <div><strong id="mr-time">0:00</strong><span>مدة الصمود</span></div>
+        <div><strong id="mr-score">0</strong><span>نقاط الماراثون</span></div>
+      </div>
+      <div class="results-actions">
+        <button class="btn btn-primary" id="btn-mr-leaderboard">🏁 لوحة الماراثون</button>
+        <button class="btn btn-ghost" id="btn-mr-dashboard">لوحتي</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 🏁 MARATHON: LEADERBOARD ============ -->
+  <section class="screen screen--marathon-leaderboard" id="screen-marathon-leaderboard">
+    <div class="screen-head">
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع</button>
+      <h2>🏁 لوحة <span class="accent">الماراثون</span></h2>
+      <p class="muted">أفضل نتيجة حقّقها كل لاعب عبر كل الماراثونات</p>
+    </div>
+    <div class="glass-card lb-card">
+      <ol class="lb-list" id="mlb-list"><!-- injected --></ol>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN LOGIN ============ -->
   <section class="screen screen--admin-login" id="screen-admin-login">
     <div class="screen-head" style="max-width:420px;margin-inline:auto">
       <button class="btn-back" data-back="screen-welcome">→ رجوع</button>
@@ -594,6 +728,7 @@
         <button class="admin-nav-btn" data-panel="panel-age-timers" data-role="admin">⏱️ مؤقت الأعمار</button>
         <button class="admin-nav-btn" data-panel="panel-players" data-role="admin">👤 اللاعبون</button>
         <button class="admin-nav-btn" data-panel="panel-games">🎮 الغرف الجماعية</button>
+        <button class="admin-nav-btn" data-panel="panel-marathon" data-role="admin">🏁 إدارة الماراثون</button>
         <button class="admin-nav-btn" data-panel="panel-subadmin-stats" data-role="subadmin">📊 إحصائيات اللاعبين</button>
         <button class="admin-nav-btn" data-panel="panel-suggestions" data-role="admin">📮 اقتراحات اللاعبين <span class="nav-badge" id="suggestions-badge" hidden>0</span></button>
         <button class="admin-nav-btn" data-panel="panel-subadmins" data-role="admin">🧩 المشرفون الفرعيون</button>
@@ -781,6 +916,21 @@
                 <tr><th>العنوان</th><th>الفئة</th><th>المالك</th><th>اللاعبون</th><th>الحالة</th><th></th></tr>
               </thead>
               <tbody id="games-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 🏁 Marathon Management (main admin only) -->
+        <div class="admin-panel" id="panel-marathon" data-role="admin">
+          <div class="admin-panel-head">
+            <h2>🏁 إدارة الماراثون</h2>
+            <button class="btn btn-primary" id="btn-new-marathon">+ ماراثون جديد</button>
+          </div>
+          <p class="muted">حدث بقاء تنافسي مباشر: يستمر اللاعبون بالإجابة حتى الخطأ أو انتهاء الوقت، وآخر صامد يفوز.</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="marathon-table">
+              <thead><tr><th>العنوان</th><th>الفئة</th><th>الموعد</th><th>الحالة</th><th>المنضمّون</th><th></th></tr></thead>
+              <tbody id="marathon-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -1045,6 +1195,81 @@
   </div>
 </div>
 
+<!-- ============ MODAL: MARATHON EDITOR ============ -->
+<div class="modal-overlay" id="modal-marathon" hidden>
+  <form class="glass-card modal-card" id="form-marathon">
+    <h3>🏁 ماراثون جديد</h3>
+    <input type="hidden" id="maf-id">
+
+    <div class="field"><label>عنوان الماراثون</label><input type="text" id="maf-title" required></div>
+    <div class="field"><label>الوصف</label><textarea id="maf-desc"></textarea></div>
+
+    <div class="field-grid">
+      <div class="field"><label>الفئة المعرفية</label><select id="maf-category"></select></div>
+      <div class="field"><label>مستوى الصعوبة</label>
+        <select id="maf-difficulty">
+          <option value="easy">سهل</option>
+          <option value="medium" selected>متوسط</option>
+          <option value="hard">صعب</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field-grid">
+      <div class="field"><label>العمر الأدنى</label><input type="number" id="maf-age-min" value="5" required></div>
+      <div class="field"><label>العمر الأقصى</label><input type="number" id="maf-age-max" value="99" required></div>
+    </div>
+
+    <div class="field-grid">
+      <div class="field"><label>تاريخ البدء</label><input type="date" id="maf-start-date" required></div>
+      <div class="field"><label>وقت البدء</label><input type="time" id="maf-start-time" required></div>
+    </div>
+
+    <div class="field-grid">
+      <div class="field"><label>فتح التسجيل (اختياري)</label><input type="datetime-local" id="maf-reg-open"></div>
+      <div class="field"><label>إغلاق التسجيل (اختياري)</label><input type="datetime-local" id="maf-reg-close"></div>
+    </div>
+
+    <div class="field-grid">
+      <div class="field"><label>عدد اللاعبين المسموح به</label><input type="number" id="maf-max-players" min="2" value="100" required></div>
+      <div class="field"><label>عدد أسئلة المسبح</label><input type="number" id="maf-question-count" min="5" value="50" required></div>
+    </div>
+
+    <div class="field">
+      <label>مؤقت السؤال</label>
+      <div class="tf-radio-row">
+        <label class="tf-radio"><input type="radio" name="maf-timer-mode" value="age_based" checked> 🎂 حسب العمر</label>
+        <label class="tf-radio"><input type="radio" name="maf-timer-mode" value="custom"> ⏱️ وقت مخصص</label>
+      </div>
+    </div>
+    <div class="field" id="maf-time-group" hidden>
+      <label>الوقت لكل سؤال (ثانية)</label><input type="number" id="maf-time" min="5" value="15">
+    </div>
+
+    <span class="field-error" id="maf-err"></span>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-cancel-marathon">إلغاء</button>
+      <button type="submit" class="btn btn-primary">حفظ كمسودة</button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ MODAL: MARATHON PLAYER MANAGEMENT ============ -->
+<div class="modal-overlay" id="modal-marathon-players" hidden>
+  <div class="glass-card modal-card">
+    <h3 id="marathon-players-modal-title">لاعبو الماراثون</h3>
+    <div class="table-wrap">
+      <table class="admin-table" id="marathon-players-table">
+        <thead><tr><th>اللاعب</th><th>الحالة</th><th>المحاولات</th><th>النقاط</th><th>الترتيب</th><th></th></tr></thead>
+        <tbody id="marathon-players-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-close-marathon-players">إغلاق</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ MODAL: SUB ADMIN EDITOR ============ -->
 <div class="modal-overlay" id="modal-subadmin" hidden>
   <form class="glass-card modal-card" id="form-subadmin">
@@ -1074,6 +1299,7 @@
 <script src="js/quiz-engine.js" defer></script>
 <script src="js/leaderboard.js" defer></script>
 <script src="js/multiplayer.js" defer></script>
+<script src="js/marathon.js" defer></script>
 <script src="js/admin.js" defer></script>
 <script src="js/app.js" defer></script>
 </body>
