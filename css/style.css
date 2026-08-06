@@ -871,6 +871,10 @@ a{color:var(--violet-dark)}
   border:3px solid #ffb020 !important;
   animation:levelUpZoomIn .6s cubic-bezier(.2,.8,.3,1.2), levelUpGlow 1.8s ease-in-out infinite .6s;
 }
+.marathon-mix-note{
+  margin:0;padding:10px 14px;border-radius:var(--radius-sm);text-align:center;font-weight:700;font-size:.85rem;
+  background:var(--surface-tint);border:2px dashed #ffb020;color:var(--ink-1);
+}
 
 
 
