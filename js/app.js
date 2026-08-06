@@ -27,6 +27,8 @@ const PLAYER_ONLY_SCREENS = new Set([
   "screen-categories", "screen-mp-list", "screen-mp-room", "screen-quiz",
   "screen-results", "screen-dashboard", "screen-profile", "screen-leaderboard", "screen-room-rankings",
   "screen-suggest-question", "screen-random-rolling", "screen-random-preview", "screen-random-leaderboard",
+  "screen-marathon-waiting", "screen-marathon-quiz", "screen-marathon-eliminated", "screen-marathon-spectator",
+  "screen-marathon-results", "screen-marathon-leaderboard",
 ]);
 
 function guardedGoTo(screenId){
@@ -368,6 +370,8 @@ async function renderDashboard(){
   `).join("") : `<p class="muted">لم تلعب أي اختبار بعد — ابدأ الآن!</p>`;
 
   renderAchievements("dash-achievements", p, rank);
+
+  try{ await Marathon.renderDashboardAnnouncement(); }catch(e){ console.warn("تعذّر عرض إعلان الماراثون", e); }
 }
 
 function formatDate(iso){
@@ -436,6 +440,7 @@ async function renderProfile(){
   document.getElementById("pf-age-display").textContent = p.age || "—";
 
   renderRandomChallengeStats(p);
+  renderMarathonProfileStats(p);
   renderAchievements("profile-achievements", p, rank);
 }
 
@@ -450,6 +455,18 @@ function renderRandomChallengeStats(p){
     <div class="stat-card"><strong>${p.random_challenges_won || 0}</strong><span>🏆 تحديات مربوحة</span></div>
     <div class="stat-card"><strong>${p.random_challenge_best_score || 0}</strong><span>⭐ أفضل نتيجة</span></div>
     <div class="stat-card"><strong>${bestCategory}</strong><span>📚 أفضل فئة</span></div>
+  `;
+}
+
+function renderMarathonProfileStats(p){
+  const grid = document.getElementById("mar-profile-stats");
+  if (!grid) return;
+  grid.innerHTML = `
+    <div class="stat-card"><strong>${p.marathons_joined || 0}</strong><span>🏁 ماراثونات مشارَك بها</span></div>
+    <div class="stat-card"><strong>${p.marathon_wins || 0}</strong><span>👑 ماراثونات مربوحة</span></div>
+    <div class="stat-card"><strong>${p.marathon_best_rank ? "#" + p.marathon_best_rank : "—"}</strong><span>🏅 أفضل ترتيب</span></div>
+    <div class="stat-card"><strong>${p.marathon_highest_streak || 0}</strong><span>🔥 أعلى سلسلة صمود</span></div>
+    <div class="stat-card"><strong>${p.marathon_best_score || 0}</strong><span>⭐ أفضل نتيجة ماراثون</span></div>
   `;
 }
 
@@ -825,6 +842,10 @@ function initHeader(){
     guardedGoTo("screen-random-leaderboard");
     await Leaderboard.renderRandomChallenge();
   });
+  document.getElementById("btn-header-marathon-leaderboard").addEventListener("click", async () => {
+    guardedGoTo("screen-marathon-leaderboard");
+    await Marathon.renderLeaderboard();
+  });
 }
 
 /* ---------------- back buttons ---------------- */
@@ -1016,6 +1037,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initRandomChallenge();
   Leaderboard.init();
   Admin.init();
+  Marathon.init();
 
   try{
     const profile = await QV.restoreSession();
