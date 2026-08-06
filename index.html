@@ -1227,8 +1227,9 @@
         <label class="tf-radio"><input type="radio" name="maf-timer-mode" value="custom"> ⏱️ وقت مخصص</label>
       </div>
     </div>
-    <div class="field" id="maf-time-group" hidden>
-      <label>الوقت لكل سؤال (ثانية)</label><input type="number" id="maf-time" min="5" value="15">
+    <div class="field-grid" id="maf-time-group" hidden>
+      <div class="field"><label>وقت سؤال الاختيار من متعدد (ثانية)</label><input type="number" id="maf-time-mc" min="5" value="15"></div>
+      <div class="field"><label>وقت سؤال صح/خطأ (ثانية)</label><input type="number" id="maf-time-tf" min="5" value="10"></div>
     </div>
 
     <span class="field-error" id="maf-err"></span>
