@@ -351,7 +351,10 @@ const Admin = (function(){
     });
   }
 
-  function openQuestionModal(q){
+  let editingSuggestionMode = false;
+
+  function openQuestionModal(q, isSuggestionEdit){
+    editingSuggestionMode = !!isSuggestionEdit;
     document.getElementById("question-modal-title").textContent = q ? "تعديل السؤال" : "سؤال جديد";
     document.getElementById("qf-id").value = q ? q.id : "";
     document.getElementById("qf-text").value = q ? q.question : "";
@@ -413,10 +416,11 @@ const Admin = (function(){
       // الفرعيين حتى يرى كل مشرف فرعي أسئلته هو فقط
       room_id: document.getElementById("qf-room").value || null,
       owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
-      // أي سؤال يُحفظ من لوحة تحكم المشرف (سواء جديد، أو تعديل مباشر، أو
-      // "تعديل ثم قبول" لاقتراح لاعب) يصبح "مقبولاً" فورًا — فقط الاقتراحات
-      // التي لم يفتحها أي مشرف بعد تبقى بحالة "قيد المراجعة"
-      status: "approved",
+      // أي سؤال يُحفظ من لوحة تحكم المشرف (سواء جديد أو تعديل مباشر) يصبح
+      // "مقبولاً" فورًا. الاستثناء الوحيد: تعديل اقتراح لاعب عبر زر "✏️ تعديل
+      // السؤال" في لوحة الاقتراحات — يبقى هذا التعديل "قيد المراجعة" ولا
+      // يُقبل تلقائيًا؛ يجب على المشرف الضغط على "✅ قبول" بشكل منفصل بعده
+      status: editingSuggestionMode ? "pending" : "approved",
       // نُصفّر حقول الأنواع الأخرى دائمًا حتى لا تبقى بيانات قديمة عالقة
       // عند تغيير نوع سؤال موجود مسبقًا
       option1: null, option2: null, option3: null, option4: null,
@@ -503,19 +507,28 @@ const Admin = (function(){
 
     try{
       const isNew = !id;
+      const wasSuggestionEdit = editingSuggestionMode;
       await QV.saveQuestion(payload);
       closeModal("modal-question");
-      showToast("تم حفظ السؤال بنجاح ✔");
-      await renderQuestionsTable();
-      if (currentRole === "subadmin"){
-        const games = await visibleGames();
-        const room = games.find(g => g.id === payload.room_id);
-        await QV.logActivity({
-          actorUsername: currentAdminUsername, actorRole: "subadmin",
-          action: isNew ? "إضافة سؤال" : "تعديل سؤال",
-          roomName: room ? room.title : null,
-          questionInfo: payload.question.slice(0, 80),
-        });
+      editingSuggestionMode = false;
+
+      if (wasSuggestionEdit){
+        // تعديل اقتراح لاعب فقط — يبقى "قيد المراجعة"، ولم يُقبل بعد
+        showToast("تم حفظ التعديلات ✔ — لا يزال الاقتراح قيد المراجعة، اضغط \"✅ قبول\" لإتمامه");
+        await renderSuggestionsTable();
+      } else {
+        showToast("تم حفظ السؤال بنجاح ✔");
+        await renderQuestionsTable();
+        if (currentRole === "subadmin"){
+          const games = await visibleGames();
+          const room = games.find(g => g.id === payload.room_id);
+          await QV.logActivity({
+            actorUsername: currentAdminUsername, actorRole: "subadmin",
+            action: isNew ? "إضافة سؤال" : "تعديل سؤال",
+            roomName: room ? room.title : null,
+            questionInfo: payload.question.slice(0, 80),
+          });
+        }
       }
     }catch(err){
       showToast("حدث خطأ أثناء الحفظ");
@@ -1242,7 +1255,7 @@ const Admin = (function(){
         <td data-label="المستوى">${diffLabel[q.difficulty] || q.difficulty}</td>
         <td class="table-actions" data-label="">
           <button data-approve-sg="${q.id}">✅ قبول</button>
-          <button data-edit-sg="${q.id}">✏️ تعديل ثم قبول</button>
+          <button data-edit-sg="${q.id}">✏️ تعديل السؤال</button>
           <button data-reject-sg="${q.id}" class="danger">❌ رفض</button>
         </td>
       </tr>
@@ -1251,7 +1264,7 @@ const Admin = (function(){
     tbody.querySelectorAll("[data-approve-sg]").forEach(b => b.addEventListener("click", () => onApproveSuggestion(b.dataset.approveSg, list)));
     tbody.querySelectorAll("[data-edit-sg]").forEach(b => b.addEventListener("click", () => {
       const q = list.find(x => x.id === b.dataset.editSg);
-      if (q) openQuestionModal(q); // نفس نموذج تعديل الأسئلة تمامًا — الحفظ يقبل الاقتراح تلقائيًا (status: "approved")
+      if (q) openQuestionModal(q, true); // وضع "تعديل فقط" — يبقى الاقتراح قيد المراجعة حتى يضغط المشرف "قبول" لاحقًا
     }));
     tbody.querySelectorAll("[data-reject-sg]").forEach(b => b.addEventListener("click", () => onRejectSuggestion(b.dataset.rejectSg, list)));
   }
