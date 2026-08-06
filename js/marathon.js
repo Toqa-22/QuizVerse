@@ -36,6 +36,7 @@ const Marathon = (function(){
   let resolvedTimePerQuestion = 15;
   let myQuestionOrder = [];   // نسخة مُبعثرة خاصة بهذا اللاعب من مجموعة الأسئلة الثابتة —
                                // نفس الأسئلة لكل اللاعبين، لكن كل لاعب يراها بترتيب مختلف
+  let mySchedule = [];        // جدول زمني تراكمي خاص بهذا اللاعب (مدة كل سؤال قد تختلف حسب نوعه)
 
   function init(){
     document.getElementById("btn-marathon-join").addEventListener("click", onClickJoin);
@@ -231,6 +232,10 @@ const Marathon = (function(){
     // وحده (مزيج الفئات + خيارات كل سؤال تُخلط أيضًا بشكل مستقل عند عرضها) —
     // بلا أي تكرار لنفس السؤال طالما لم تُستنفد المجموعة بأكملها بعد
     myQuestionOrder = QV.shuffle((currentMarathon.question_set || []).slice());
+    // جدول زمني تراكمي: كل سؤال قد تكون مدته مختلفة عن غيره إن فعّل المشرف
+    // "⏱️ وقت مخصص" مع مدة مستقلة لكل نوع سؤال (راجع durationForQuestion) —
+    // في وضع "🎂 حسب العمر" تبقى كل الأسئلة بنفس المدة الموحّدة كالسابق تمامًا
+    mySchedule = buildQuestionSchedule(myQuestionOrder);
 
     answeredCurrentQuestion = true;
     currentQuestionIndex = -1;
@@ -241,14 +246,33 @@ const Marathon = (function(){
     refreshRemainingCount();
   }
 
+  /* مدة سؤال واحد بعينه: في وضع العمر تكون موحّدة لكل الأسئلة، وفي الوضع
+     المخصص تعتمد على نوع هذا السؤال تحديدًا (اختيار من متعدد / صح-خطأ) */
+  function durationForQuestion(q){
+    if (currentMarathon.use_age_based_timer) return resolvedTimePerQuestion;
+    const type = q.type === "true_false" ? "true_false" : "multiple_choice";
+    const perType = currentMarathon.custom_type_timers || {};
+    return perType[type] || currentMarathon.time_per_question || 15;
+  }
+
+  function buildQuestionSchedule(order){
+    let cursor = 0;
+    return order.map(q => {
+      const duration = durationForQuestion(q);
+      cursor += duration;
+      return { question: q, duration, startsAt: cursor - duration, endsAt: cursor };
+    });
+  }
+
   async function tickMarathon(){
     if (!currentMarathon || !currentMarathon.actual_start_at) return;
-    const qs = myQuestionOrder;
     const elapsed = (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000;
-    const idx = Math.floor(elapsed / resolvedTimePerQuestion);
+    let idx = mySchedule.findIndex(entry => elapsed < entry.endsAt);
+    if (idx === -1) idx = mySchedule.length;
 
     if (idx === currentQuestionIndex){
-      updateMarathonTimerUI(elapsed - idx * resolvedTimePerQuestion);
+      const entry = mySchedule[idx];
+      if (entry) updateMarathonTimerUI(entry.duration, elapsed - entry.startsAt);
       return;
     }
 
@@ -257,14 +281,14 @@ const Marathon = (function(){
       return;
     }
 
-    if (idx >= qs.length){
+    if (idx >= mySchedule.length){
       await survivedWholePool();
       return;
     }
 
     currentQuestionIndex = idx;
     answeredCurrentQuestion = false;
-    renderMarathonQuestion(qs[idx]);
+    renderMarathonQuestion(mySchedule[idx].question);
   }
 
   function renderMarathonQuestion(q){
@@ -368,9 +392,9 @@ const Marathon = (function(){
     if (el) el.textContent = remaining;
   }
 
-  function updateMarathonTimerUI(elapsedInQuestion){
-    const remaining = Math.max(0, Math.ceil(resolvedTimePerQuestion - elapsedInQuestion));
-    const ratio = Math.max(0, (resolvedTimePerQuestion - elapsedInQuestion) / resolvedTimePerQuestion);
+  function updateMarathonTimerUI(questionDuration, elapsedInQuestion){
+    const remaining = Math.max(0, Math.ceil(questionDuration - elapsedInQuestion));
+    const ratio = Math.max(0, (questionDuration - elapsedInQuestion) / questionDuration);
     const arc = document.getElementById("mq-timer-arc");
     const val = document.getElementById("mq-timer-value");
     if (arc){ arc.style.strokeDashoffset = TIMER_CIRC * (1 - ratio); arc.classList.toggle("low", remaining <= 5); }
