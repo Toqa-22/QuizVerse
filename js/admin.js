@@ -55,7 +55,10 @@ const Admin = (function(){
     document.getElementById("gf-category").addEventListener("change", async (e) => {
       const timers = await QV.getCategoryTimers();
       const t = timers[e.target.value];
-      if (t) document.getElementById("gf-time").value = t;
+      // نُعبّئ حقل "الاختيار من متعدد" تلقائيًا بمؤقت الفئة المُعدّ من قبل
+      // المشرف عند اختيارها (أكثر الأنواع شيوعًا)، ويبقى بإمكان المشرف تعديل
+      // بقية الحقول يدويًا حسب كل نوع سؤال
+      if (t) document.getElementById("gf-time-mc").value = t;
     });
     ["gf-dist-easy", "gf-dist-medium", "gf-dist-hard", "gf-qcount"].forEach(id => {
       document.getElementById(id).addEventListener("input", updateDistSumHint);
@@ -992,7 +995,10 @@ const Admin = (function(){
   function openGameModal(){
     document.getElementById("form-game").reset();
     document.getElementById("gf-qcount").value = 10;
-    document.getElementById("gf-time").value = 15;
+    document.getElementById("gf-time-mc").value = 15;
+    document.getElementById("gf-time-tf").value = 10;
+    document.getElementById("gf-time-matching").value = 25;
+    document.getElementById("gf-time-ordering").value = 20;
     document.getElementById("gf-maxplayers").value = 20;
     document.getElementById("gf-age-min").value = 5;
     document.getElementById("gf-age-max").value = 99;
@@ -1053,9 +1059,16 @@ const Admin = (function(){
       return;
     }
 
+    const customTypeTimers = {
+      multiple_choice: Number(document.getElementById("gf-time-mc").value) || 15,
+      true_false: Number(document.getElementById("gf-time-tf").value) || 10,
+      matching: Number(document.getElementById("gf-time-matching").value) || 25,
+      ordering: Number(document.getElementById("gf-time-ordering").value) || 20,
+    };
+
     const payload = {
       timer_mode: timerMode,
-      time_per_question: timerMode === "age_based" ? 15 : Number(document.getElementById("gf-time").value),
+      time_per_question: timerMode === "age_based" ? 15 : customTypeTimers.multiple_choice,
       title: document.getElementById("gf-title").value.trim(),
       description: document.getElementById("gf-desc").value.trim(),
       category: document.getElementById("gf-category").value,
@@ -1069,8 +1082,10 @@ const Admin = (function(){
       // على صاحبها فقط — تبقى غرف المشرف الرئيسي بلا مالك كما كانت دائمًا
       owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
       // إعدادات العشوائية الخاصة بهذه الغرفة تحديدًا (ميزة #8) — توزيع المستويات
-      // الآن بعدد أسئلة صريح لكل مستوى (وليس نسبة مئوية)، يساوي مجموعه دائمًا
-      // عدد الأسئلة الكلي أعلاه عند تفعيله
+      // بعدد أسئلة صريح لكل مستوى (وليس نسبة مئوية)، يساوي مجموعه دائمًا عدد
+      // الأسئلة الكلي أعلاه عند تفعيله. وفي وضع "⏱️ وقت مخصص"، مدة مستقلة لكل
+      // نوع سؤال (اختيار من متعدد / صح-خطأ / مطابقة / ترتيب) تتجاوز مؤقت
+      // النوع العام المُعدّ في "🎚️ إعدادات الاختبار" لهذه الغرفة تحديدًا فقط
       quiz_random_settings: {
         shuffleQuestions: document.getElementById("gf-shuffle-questions").checked,
         shuffleAnswers: document.getElementById("gf-shuffle-answers").checked,
@@ -1079,6 +1094,7 @@ const Admin = (function(){
         difficultyDistribution: distSum > 0
           ? { easy: distEasy, medium: distMedium, hard: distHard }
           : null,
+        customTypeTimers: timerMode === "custom" ? customTypeTimers : null,
       },
     };
     try{
@@ -1460,6 +1476,8 @@ const Admin = (function(){
       const typeTimers = m.custom_type_timers || {};
       document.getElementById("maf-time-mc").value = typeTimers.multiple_choice || 15;
       document.getElementById("maf-time-tf").value = typeTimers.true_false || 10;
+      document.getElementById("maf-time-matching").value = typeTimers.matching || 25;
+      document.getElementById("maf-time-ordering").value = typeTimers.ordering || 20;
     } else {
       // وضع الإنشاء: قيم افتراضية فارغة كالسابق تمامًا
       title.textContent = "🏁 ماراثون جديد";
@@ -1471,6 +1489,8 @@ const Admin = (function(){
       document.getElementById("maf-question-count").value = 50;
       document.getElementById("maf-time-mc").value = 15;
       document.getElementById("maf-time-tf").value = 10;
+      document.getElementById("maf-time-matching").value = 25;
+      document.getElementById("maf-time-ordering").value = 20;
       document.querySelector('input[name="maf-timer-mode"][value="age_based"]').checked = true;
       document.getElementById("maf-time-group").hidden = true;
     }
@@ -1510,6 +1530,8 @@ const Admin = (function(){
       custom_type_timers: timerMode === "custom" ? {
         multiple_choice: Number(document.getElementById("maf-time-mc").value) || 15,
         true_false: Number(document.getElementById("maf-time-tf").value) || 10,
+        matching: Number(document.getElementById("maf-time-matching").value) || 25,
+        ordering: Number(document.getElementById("maf-time-ordering").value) || 20,
       } : null,
       time_per_question: timerMode === "custom" ? (Number(document.getElementById("maf-time-mc").value) || 15) : 15,
     };
