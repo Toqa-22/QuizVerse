@@ -1190,7 +1190,7 @@
 <!-- ============ MODAL: MARATHON EDITOR ============ -->
 <div class="modal-overlay" id="modal-marathon" hidden>
   <form class="glass-card modal-card" id="form-marathon">
-    <h3>🏁 ماراثون جديد</h3>
+    <h3 id="marathon-modal-title">🏁 ماراثون جديد</h3>
     <input type="hidden" id="maf-id">
 
     <div class="field"><label>عنوان الماراثون</label><input type="text" id="maf-title" required></div>
@@ -1235,7 +1235,7 @@
     <span class="field-error" id="maf-err"></span>
     <div class="modal-actions">
       <button type="button" class="btn btn-ghost" id="btn-cancel-marathon">إلغاء</button>
-      <button type="submit" class="btn btn-primary">حفظ كمسودة</button>
+      <button type="submit" class="btn btn-primary" id="btn-submit-marathon">حفظ كمسودة</button>
     </div>
   </form>
 </div>
