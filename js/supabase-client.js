@@ -54,6 +54,8 @@ const QV = (function(){
     adminAccounts: "qv_demo_admin_accounts", // username(lowercase) -> { username, passwordHash } — نفس آلية bootstrap
     subAdmins: "qv_demo_sub_admins",  // username(lowercase) -> { id, username, passwordHash, active, created_at }
     activityLog: "qv_demo_activity_log", // مصفوفة بأحدث العمليات أولًا
+    marathons: "qv_demo_marathons",       // مصفوفة كائنات الماراثون
+    marathonPlayers: "qv_demo_marathon_players", // { marathonId: { userId: playerRow } }
   };
 
   function lsGet(key, fallback){
@@ -1068,6 +1070,301 @@ const QV = (function(){
     else if (client) client.removeChannel(channel);
   }
 
+  /* =========================================================
+     🏁 MARATHON MODE (حدث بقاء تنافسي مباشر)
+     =========================================================
+     يشارك بنية مشابهة لـ games/game_players (مجموعة أسئلة ثابتة يُولّدها
+     المشرف عند "بدء الآن"، وتحديثات لحظية عبر marathon_players)، مع فارق
+     جوهري: التوقيت. بما أن هذا المشروع بلا أي خادم أو دالة سحابية مركزية
+     تُقدّم الأسئلة تباعًا، يُحسب "السؤال الحالي" بشكل حتمي بحتًا من الزمن
+     الفعلي المنقضي منذ actual_start_at ومدة كل سؤال — فيتفق كل المتصلين
+     (لاعبين ومتفرجين) تلقائيًا على نفس السؤال في نفس اللحظة دون أي تنسيق
+     مركزي إضافي. راجع marathon.js لتفاصيل هذا الحساب في الواجهة. */
+
+  async function getMarathons(){
+    if (demoMode) return lsGet(LS_KEYS.marathons, []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const { data, error } = await client.from("marathons").select("*").order("created_at", { ascending: false });
+    if (error){ console.error(error); return []; }
+    return data;
+  }
+
+  async function saveMarathon(m){
+    if (demoMode){
+      let all = lsGet(LS_KEYS.marathons, []);
+      if (m.id){
+        all = all.map(item => item.id === m.id ? { ...item, ...m } : item);
+      } else {
+        m.id = "mar-" + Date.now();
+        m.status = m.status || "draft";
+        m.created_at = new Date().toISOString();
+        all.push(m);
+      }
+      lsSet(LS_KEYS.marathons, all);
+      return m;
+    }
+    if (m.id){
+      const { data, error } = await client.from("marathons").update(m).eq("id", m.id).select().single();
+      if (error) throw error;
+      return data;
+    }
+    delete m.id;
+    const { data, error } = await client.from("marathons").insert(m).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function deleteMarathon(id){
+    if (demoMode){
+      lsSet(LS_KEYS.marathons, lsGet(LS_KEYS.marathons, []).filter(m => m.id !== id));
+      const all = lsGet(LS_KEYS.marathonPlayers, {});
+      delete all[id];
+      lsSet(LS_KEYS.marathonPlayers, all);
+      return true;
+    }
+    const { error } = await client.from("marathons").delete().eq("id", id);
+    if (error) throw error;
+    return true;
+  }
+
+  /* الماراثون الأنسب لعرضه كإعلان على لوحة اللاعب: "started" له الأولوية
+     دائمًا (حدث جارٍ الآن)، وإلا أقرب "published" زمنيًا من حيث الموعد */
+  async function getActiveMarathon(){
+    const all = await getMarathons();
+    const active = all.filter(m => m.status === "published" || m.status === "started");
+    if (!active.length) return null;
+    active.sort((a, b) => {
+      if (a.status !== b.status) return a.status === "started" ? -1 : 1;
+      return new Date(a.start_date + "T" + a.start_time) - new Date(b.start_date + "T" + b.start_time);
+    });
+    return active[0];
+  }
+
+  /* يُولّد مجموعة الأسئلة الثابتة (نفسها ونفس ترتيبها لكل اللاعبين لعدالة
+     المنافسة، تمامًا كآلية بدء الغرف الجماعية) ويضبط اللحظة الفعلية للبدء */
+  async function startMarathonNow(id){
+    const all = await getMarathons();
+    const m = all.find(x => x.id === id);
+    if (!m) throw new Error("الماراثون غير موجود");
+    // نقتصر على أسئلة "اختيار من متعدد" و"صح/خطأ" فقط لوضع الماراثون — أنسب
+    // نوعين لإيقاع سريع يتطلّب إجابة فورية لحظة ظهور كل سؤال، ويبسّطان عرض
+    // اللعب بشكل موثوق لكل اللاعبين والمتفرجين في آنٍ واحد
+    const pool = await getQuestions({
+      category: m.category, ageMin: m.age_min, ageMax: m.age_max, difficulty: m.difficulty,
+    });
+    const filtered = pool.filter(q => (q.type || "multiple_choice") === "multiple_choice" || q.type === "true_false");
+    const questionSet = shuffle(filtered.slice()).slice(0, m.question_count);
+    if (!questionSet.length) throw new Error("لا توجد أسئلة كافية (اختيار من متعدد/صح-خطأ) مطابقة لإعدادات هذا الماراثون");
+    return saveMarathon({ id, status: "started", actual_start_at: new Date().toISOString(), question_set: questionSet });
+  }
+
+  async function getMarathonPlayers(marathonId){
+    if (demoMode){
+      const all = lsGet(LS_KEYS.marathonPlayers, {});
+      return Object.values(all[marathonId] || {});
+    }
+    const { data, error } = await client.from("marathon_players").select("*").eq("marathon_id", marathonId);
+    if (error){ console.error(error); return []; }
+    return data;
+  }
+
+  async function getMarathonPlayer(marathonId, userId){
+    if (demoMode){
+      const all = lsGet(LS_KEYS.marathonPlayers, {});
+      return (all[marathonId] && all[marathonId][userId]) || null;
+    }
+    const { data, error } = await client.from("marathon_players").select("*").eq("marathon_id", marathonId).eq("user_id", userId).maybeSingle();
+    if (error){ console.error(error); return null; }
+    return data;
+  }
+
+  async function updateMarathonPlayer(id, patch){
+    if (demoMode){
+      const all = lsGet(LS_KEYS.marathonPlayers, {});
+      for (const mid in all){
+        for (const uid in all[mid]){
+          if (all[mid][uid].id === id){
+            all[mid][uid] = { ...all[mid][uid], ...patch };
+            lsSet(LS_KEYS.marathonPlayers, all);
+            return all[mid][uid];
+          }
+        }
+      }
+      return null;
+    }
+    const { data, error } = await client.from("marathon_players").update(patch).eq("id", id).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  /* الانضمام لماراثون: إمّا مشاركة جديدة تمامًا، أو إعادة انضمام بعد أن سمح
+     المشرف صراحة بذلك (replay_allowed) — راجع القيد الفريد على
+     (marathon_id, user_id) في sql/migrate_marathon_mode.sql، فأي استدعاء
+     لاحق لنفس اللاعب في نفس الماراثون يُحدَّث بدل أن يُنشئ صفًا مكررًا */
+  async function joinMarathon(marathonId, player){
+    const existing = await getMarathonPlayer(marathonId, player.userId);
+    const row = {
+      marathon_id: marathonId, user_id: player.userId, username: player.name, avatar: player.avatar,
+      status: "alive", questions_answered: 0, correct_answers: 0, current_streak: 0,
+      highest_streak: existing ? (existing.highest_streak || 0) : 0,
+      survived_seconds: 0, marathon_score: 0, rank: null,
+      attempts: existing ? (existing.attempts || 1) + 1 : 1,
+      replay_allowed: false, eliminated_at: null, joined_at: new Date().toISOString(),
+    };
+    if (demoMode){
+      const all = lsGet(LS_KEYS.marathonPlayers, {});
+      all[marathonId] = all[marathonId] || {};
+      row.id = existing ? existing.id : newId("mp");
+      all[marathonId][player.userId] = row;
+      lsSet(LS_KEYS.marathonPlayers, all);
+      return row;
+    }
+    const { data, error } = await client.from("marathon_players").upsert(row, { onConflict: "marathon_id,user_id" }).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  /* يمنح المشرف إذنًا صريحًا للاعب سبق أن شارك بإعادة الانضمام — يبقى سجلّه
+     السابق (أعلى streak محقَّق مثلاً) حتى ينضم فعليًا فتُصفَّر إحصائيات
+     المحاولة الجديدة (راجع joinMarathon أعلاه) */
+  async function allowMarathonReplay(marathonId, userId){
+    const p = await getMarathonPlayer(marathonId, userId);
+    if (!p) throw new Error("اللاعب لم يشارك في هذا الماراثون بعد");
+    return updateMarathonPlayer(p.id, { replay_allowed: true });
+  }
+
+  /* يصفّر محاولة اللاعب بالكامل فورًا (بخلاف "السماح بإعادة اللعب" الذي
+     ينتظر انضمامه من جديد) — يُستخدم لتصحيح خطأ إداري مثلاً */
+  async function resetMarathonAttempt(marathonId, userId){
+    const p = await getMarathonPlayer(marathonId, userId);
+    if (!p) throw new Error("اللاعب لم يشارك في هذا الماراثون بعد");
+    return updateMarathonPlayer(p.id, {
+      status: "alive", questions_answered: 0, correct_answers: 0, current_streak: 0,
+      highest_streak: 0, survived_seconds: 0, marathon_score: 0, rank: null,
+      attempts: 0, replay_allowed: true, eliminated_at: null,
+    });
+  }
+
+  /* يُسجَّل عند كل إجابة أثناء الماراثون: إجابة صحيحة تُطيل سلسلة الصمود
+     وتضيف 5 نقاط لمجموع الماراثون (يُضاف لاحقًا لإجمالي نقاط اللاعب دفعة
+     واحدة عند إنهاء المشرف للماراثون — راجع finalizeMarathon)، وإجابة
+     خاطئة أو انتهاء الوقت تُقصي اللاعب فورًا من البقاء حيًا */
+  async function recordMarathonAnswer(marathonId, userId, { correct, survivedSeconds }){
+    const p = await getMarathonPlayer(marathonId, userId);
+    if (!p || p.status !== "alive") return p;
+    const questionsAnswered = (p.questions_answered || 0) + 1;
+    let patch;
+    if (correct){
+      const streak = (p.current_streak || 0) + 1;
+      patch = {
+        questions_answered: questionsAnswered,
+        correct_answers: (p.correct_answers || 0) + 1,
+        current_streak: streak,
+        highest_streak: Math.max(p.highest_streak || 0, streak),
+        marathon_score: (p.marathon_score || 0) + 5,
+      };
+    } else {
+      patch = {
+        questions_answered: questionsAnswered,
+        current_streak: 0,
+        status: "eliminated",
+        eliminated_at: new Date().toISOString(),
+        survived_seconds: survivedSeconds != null ? Math.round(survivedSeconds) : (p.survived_seconds || 0),
+      };
+    }
+    return updateMarathonPlayer(p.id, patch);
+  }
+
+  /* لاعب صمد حتى نهاية "مسبح" الأسئلة كله دون أن يُقصى (نادر لكن ممكن) */
+  async function finishMarathonSurvivor(marathonId, userId, survivedSeconds){
+    const p = await getMarathonPlayer(marathonId, userId);
+    if (!p) return null;
+    return updateMarathonPlayer(p.id, {
+      status: "finished",
+      survived_seconds: survivedSeconds != null ? Math.round(survivedSeconds) : (p.survived_seconds || 0),
+    });
+  }
+
+  /* ================= إنهاء الماراثون: حساب الترتيب النهائي ومنح الجوائز =================
+     يُستدعى من لوحة تحكم المشرف فقط ("🏁 إنهاء الآن"). يحسب ترتيبًا نهائيًا
+     لكل المشاركين (الناجون/المُتمّون أولاً، ثم حسب أعلى سلسلة صمود، فعدد
+     الأسئلة، فأطول مدة صمود)، يمنح مكافأة المراكز الثلاثة الأولى
+     (+200/+150/+100)، ثم يضيف مجموع نقاط الماراثون الكامل لكل لاعب (نقاط
+     الإجابات + مكافأة الترتيب إن وُجدت) إلى total_score دفعة واحدة، ويحدّث
+     إحصائيات الماراثون التراكمية على ملفه الشخصي. */
+  async function finalizeMarathon(marathonId){
+    const players = await getMarathonPlayers(marathonId);
+    if (!players.length){
+      await saveMarathon({ id: marathonId, status: "finished" });
+      return [];
+    }
+
+    const ranked = players.slice().sort((a, b) => {
+      const aSurvived = a.status === "alive" || a.status === "finished";
+      const bSurvived = b.status === "alive" || b.status === "finished";
+      if (aSurvived !== bSurvived) return aSurvived ? -1 : 1;
+      if ((b.highest_streak || 0) !== (a.highest_streak || 0)) return (b.highest_streak || 0) - (a.highest_streak || 0);
+      if ((b.questions_answered || 0) !== (a.questions_answered || 0)) return (b.questions_answered || 0) - (a.questions_answered || 0);
+      return (b.survived_seconds || 0) - (a.survived_seconds || 0);
+    });
+
+    const placementBonus = { 1: 200, 2: 150, 3: 100 };
+    for (let i = 0; i < ranked.length; i++){
+      const rank = i + 1;
+      const p = ranked[i];
+      const bonus = placementBonus[rank] || 0;
+      const finalScore = (p.marathon_score || 0) + bonus;
+
+      await updateMarathonPlayer(p.id, {
+        rank, marathon_score: finalScore,
+        status: p.status === "alive" ? "finished" : p.status,
+      });
+
+      try{
+        const profile = await getProfile(p.user_id);
+        if (profile){
+          await updateProfile(p.user_id, {
+            total_score: (profile.total_score || 0) + finalScore,
+            marathons_joined: (profile.marathons_joined || 0) + 1,
+            marathon_wins: (profile.marathon_wins || 0) + (rank === 1 ? 1 : 0),
+            marathon_best_rank: (profile.marathon_best_rank == null || rank < profile.marathon_best_rank) ? rank : profile.marathon_best_rank,
+            marathon_highest_streak: Math.max(profile.marathon_highest_streak || 0, p.highest_streak || 0),
+            marathon_best_score: Math.max(profile.marathon_best_score || 0, finalScore),
+          });
+        }
+      }catch(e){ console.error("تعذّر تحديث ملف اللاعب بعد الماراثون:", p.user_id, e); }
+    }
+
+    await saveMarathon({ id: marathonId, status: "finished" });
+    return ranked;
+  }
+
+  /* لوحة ترتيب: بلا معرّف = عالمية (أفضل نتيجة ماراثون حقّقها كل لاعب عبر كل
+     الماراثونات)، أو معرّف ماراثون محدد = ترتيب ذلك الحدث تحديدًا */
+  async function getMarathonLeaderboard(marathonId){
+    if (!marathonId || marathonId === "all"){
+      const profiles = await listAllProfiles();
+      return profiles
+        .filter(p => (p.marathons_joined || 0) > 0)
+        .slice()
+        .sort((a, b) => (b.marathon_best_score || 0) - (a.marathon_best_score || 0))
+        .map((p, i) => ({ ...p, rank: i + 1 }));
+    }
+    const players = await getMarathonPlayers(marathonId);
+    return players.slice().sort((a, b) => (a.rank || 999) - (b.rank || 999) || (b.marathon_score || 0) - (a.marathon_score || 0));
+  }
+
+  function subscribeToMarathon(marathonId, onChange){
+    if (demoMode){
+      const interval = setInterval(() => onChange({ polling: true }), 2000);
+      return { unsubscribe: () => clearInterval(interval) };
+    }
+    const channel = client.channel("marathon-" + marathonId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "marathon_players", filter: `marathon_id=eq.${marathonId}` }, onChange)
+      .on("postgres_changes", { event: "*", schema: "public", table: "marathons", filter: `id=eq.${marathonId}` }, onChange)
+      .subscribe();
+    return channel;
+  }
+
   /* ================= SUB ADMIN ACCOUNTS (يُنشئها المشرف الرئيسي فقط) =================
      صلاحيات محدودة: إدارة الغرف الجماعية والأسئلة الخاصة بغرفهم فقط. نفس آلية حماية
      كلمة المرور المستخدمة لحساب المشرف الرئيسي أعلاه (بصمة + تحقق عبر RPC من جهة
@@ -1359,5 +1656,9 @@ const QV = (function(){
     getCustomCategories, addCategory, deleteCategory,
     getMaxTotalPlayers, saveMaxTotalPlayers,
     submitRandomChallengeResult, getRandomChallengeLeaderboard,
+
+    getMarathons, saveMarathon, deleteMarathon, getActiveMarathon, startMarathonNow,
+    getMarathonPlayers, getMarathonPlayer, joinMarathon, allowMarathonReplay, resetMarathonAttempt,
+    recordMarathonAnswer, finishMarathonSurvivor, finalizeMarathon, getMarathonLeaderboard, subscribeToMarathon,
   };
 })();
