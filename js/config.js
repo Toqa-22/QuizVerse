@@ -36,4 +36,9 @@ const QUIZVERSE_ACHIEVEMENTS = [
   { id: "rc_lucky",    name: "محظوظ",           icon: "🍀", desc: "أكمل تحديًا عشوائيًا بإجابات كاملة صحيحة", check: (p) => (p.random_challenge_perfect_count || 0) >= 1 },
   { id: "rc_master",   name: "سيد العشوائي",     icon: "🎯", desc: "اربح 10 تحديات عشوائية (نصف الأسئلة صحيحة فأكثر)", check: (p) => (p.random_challenges_won || 0) >= 10 },
   { id: "rc_100",      name: "مدمن التحدي",      icon: "💯", desc: "أكمل 100 تحدٍ عشوائي",             check: (p) => (p.random_challenges_played || 0) >= 100 },
+  // 🏁 إنجازات وضع "الماراثون"
+  { id: "mar_first",   name: "أول ماراثون",      icon: "🏁", desc: "أكمل أول ماراثون تشارك فيه",       check: (p) => (p.marathons_joined || 0) >= 1 },
+  { id: "mar_survivor", name: "الناجي",          icon: "🔥", desc: "اصمد 25 سؤالاً متتاليًا في ماراثون واحد", check: (p) => (p.marathon_highest_streak || 0) >= 25 },
+  { id: "mar_champion", name: "بطل الماراثون",    icon: "👑", desc: "اربح المركز الأول في ماراثون",     check: (p) => (p.marathon_best_rank || 0) === 1 },
+  { id: "mar_legend",  name: "أسطورة الماراثون", icon: "🏆", desc: "اربح 10 ماراثونات",                check: (p) => (p.marathon_wins || 0) >= 10 },
 ];
