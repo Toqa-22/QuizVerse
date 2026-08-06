@@ -176,7 +176,6 @@ const Marathon = (function(){
   async function beginMarathonCountdownAndPlay(){
     goTo("screen-marathon-quiz");
     await playQuizCountdown(); // يُعاد استخدام نفس عدّاد 3-2-1-GO! الموجود مسبقًا للاختبارات العادية
-    QVSound.startMusic();
     await startGameplayLoop();
   }
 
@@ -294,7 +293,6 @@ const Marathon = (function(){
   async function eliminatePlayer(alreadyRecorded){
     clearInterval(gameTimerHandle); gameTimerHandle = null;
     if (gameplayChannel){ QV.unsubscribe(gameplayChannel); gameplayChannel = null; }
-    QVSound.stopMusic();
 
     if (!alreadyRecorded){
       const survivedSeconds = (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000;
@@ -315,7 +313,6 @@ const Marathon = (function(){
     if (gameplayChannel){ QV.unsubscribe(gameplayChannel); gameplayChannel = null; }
     const survivedSeconds = (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000;
     currentPlayerRow = await QV.finishMarathonSurvivor(currentMarathon.id, currentPlayerObj.userId, survivedSeconds);
-    QVSound.stopMusic();
     QVSound.win();
     showToast("🏁 صمدت حتى نهاية كل الأسئلة! بانتظار إعلان النتائج النهائية من المشرف");
     goTo("screen-dashboard");
