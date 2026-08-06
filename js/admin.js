@@ -1372,6 +1372,7 @@ const Admin = (function(){
           ${m.status === "draft" ? `<button data-publish-mar="${m.id}">📢 نشر</button>` : ""}
           ${m.status === "published" ? `<button data-start-mar="${m.id}">🏁 ابدأ الآن</button>` : ""}
           ${m.status === "started" ? `<button data-finish-mar="${m.id}">🏆 إنهاء الآن</button>` : ""}
+          <button data-edit-mar="${m.id}">✏️ تعديل</button>
           <button data-players-mar="${m.id}" data-title="${escapeHtml(m.title)}">👥 اللاعبون</button>
           <button data-del-mar="${m.id}" class="danger">حذف</button>
         </td>
@@ -1381,6 +1382,7 @@ const Admin = (function(){
     tbody.querySelectorAll("[data-publish-mar]").forEach(b => b.addEventListener("click", () => onPublishMarathon(b.dataset.publishMar)));
     tbody.querySelectorAll("[data-start-mar]").forEach(b => b.addEventListener("click", () => onStartMarathon(b.dataset.startMar)));
     tbody.querySelectorAll("[data-finish-mar]").forEach(b => b.addEventListener("click", () => onFinishMarathon(b.dataset.finishMar)));
+    tbody.querySelectorAll("[data-edit-mar]").forEach(b => b.addEventListener("click", () => openMarathonModal(editingMarathons.find(x => x.id === b.dataset.editMar))));
     tbody.querySelectorAll("[data-players-mar]").forEach(b => b.addEventListener("click", () => openMarathonPlayersModal(b.dataset.playersMar, b.dataset.title)));
     tbody.querySelectorAll("[data-del-mar]").forEach(b => b.addEventListener("click", () => onDeleteMarathon(b.dataset.delMar)));
   }
@@ -1420,17 +1422,59 @@ const Admin = (function(){
     }catch(err){ showToast("تعذّر حذف الماراثون"); console.error(err); }
   }
 
-  function openMarathonModal(){
+  function isoToDatetimeLocal(iso){
+    if (!iso) return "";
+    try{
+      const d = new Date(iso);
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }catch(e){ return ""; }
+  }
+
+  function openMarathonModal(m){
     document.getElementById("form-marathon").reset();
-    document.getElementById("maf-id").value = "";
-    document.getElementById("maf-age-min").value = 5;
-    document.getElementById("maf-age-max").value = 99;
-    document.getElementById("maf-max-players").value = 100;
-    document.getElementById("maf-question-count").value = 50;
-    document.getElementById("maf-time-mc").value = 15;
-    document.getElementById("maf-time-tf").value = 10;
     document.getElementById("maf-err").textContent = "";
-    document.getElementById("maf-time-group").hidden = true;
+
+    const title = document.getElementById("marathon-modal-title");
+    const submitBtn = document.getElementById("btn-submit-marathon");
+
+    if (m){
+      // وضع التعديل: نُعبّئ كل الحقول من بيانات الماراثون الحالية
+      title.textContent = "✏️ تعديل الماراثون";
+      submitBtn.textContent = "حفظ التعديلات";
+      document.getElementById("maf-id").value = m.id;
+      document.getElementById("maf-title").value = m.title || "";
+      document.getElementById("maf-desc").value = m.description || "";
+      document.getElementById("maf-age-min").value = m.age_min != null ? m.age_min : 5;
+      document.getElementById("maf-age-max").value = m.age_max != null ? m.age_max : 99;
+      document.getElementById("maf-start-date").value = m.start_date || "";
+      document.getElementById("maf-start-time").value = m.start_time || "";
+      document.getElementById("maf-reg-open").value = isoToDatetimeLocal(m.registration_open_at);
+      document.getElementById("maf-reg-close").value = isoToDatetimeLocal(m.registration_close_at);
+      document.getElementById("maf-max-players").value = m.max_players || 100;
+      document.getElementById("maf-question-count").value = m.question_count || 50;
+
+      const useAgeBased = m.use_age_based_timer !== false;
+      document.querySelector(`input[name="maf-timer-mode"][value="${useAgeBased ? "age_based" : "custom"}"]`).checked = true;
+      document.getElementById("maf-time-group").hidden = useAgeBased;
+      const typeTimers = m.custom_type_timers || {};
+      document.getElementById("maf-time-mc").value = typeTimers.multiple_choice || 15;
+      document.getElementById("maf-time-tf").value = typeTimers.true_false || 10;
+    } else {
+      // وضع الإنشاء: قيم افتراضية فارغة كالسابق تمامًا
+      title.textContent = "🏁 ماراثون جديد";
+      submitBtn.textContent = "حفظ كمسودة";
+      document.getElementById("maf-id").value = "";
+      document.getElementById("maf-age-min").value = 5;
+      document.getElementById("maf-age-max").value = 99;
+      document.getElementById("maf-max-players").value = 100;
+      document.getElementById("maf-question-count").value = 50;
+      document.getElementById("maf-time-mc").value = 15;
+      document.getElementById("maf-time-tf").value = 10;
+      document.querySelector('input[name="maf-timer-mode"][value="age_based"]').checked = true;
+      document.getElementById("maf-time-group").hidden = true;
+    }
+
     openModal("modal-marathon");
   }
 
@@ -1468,8 +1512,15 @@ const Admin = (function(){
         true_false: Number(document.getElementById("maf-time-tf").value) || 10,
       } : null,
       time_per_question: timerMode === "custom" ? (Number(document.getElementById("maf-time-mc").value) || 15) : 15,
-      owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
     };
+
+    const isNew = !payload.id;
+    if (isNew){
+      // الملكية تُحدَّد فقط عند الإنشاء؛ عند التعديل نُبقي مالك الماراثون
+      // الأصلي كما هو تمامًا (حتى لا يُفقد ربطه بالمشرف الفرعي الذي أنشأه
+      // لو عدّله المشرف الرئيسي لاحقًا)
+      payload.owner_username = currentRole === "subadmin" ? currentAdminUsername : null;
+    }
 
     if (!payload.title){ errEl.textContent = "الرجاء كتابة عنوان الماراثون"; return; }
     if (!payload.start_date || !payload.start_time){ errEl.textContent = "الرجاء تحديد تاريخ ووقت البدء"; return; }
@@ -1477,7 +1528,7 @@ const Admin = (function(){
     try{
       await QV.saveMarathon(payload);
       closeModal("modal-marathon");
-      showToast("تم حفظ الماراثون كمسودة ✔ — اضغط \"📢 نشر\" لإظهاره للاعبين");
+      showToast(isNew ? "تم حفظ الماراثون كمسودة ✔ — اضغط \"📢 نشر\" لإظهاره للاعبين" : "تم حفظ التعديلات ✔");
       await renderMarathonTable();
     }catch(err){
       errEl.textContent = err.message || "تعذّر حفظ الماراثون";
