@@ -77,7 +77,13 @@ const Marathon = (function(){
     const alreadyBox = document.getElementById("marathon-already-joined");
     const p = AppState.profile;
     const existing = p ? await QV.getMarathonPlayer(m.id, p.id) : null;
-    if (existing && !existing.replay_allowed){
+
+    if (m.status !== "started"){
+      // زر الانضمام لا يظهر إطلاقًا قبل أن يضغط المشرف "ابدأ الآن" فعليًا —
+      // لا تسجيل مسبق ولا غرفة انتظار، فقط عدّ تنازلي إعلامي حتى موعد البدء
+      joinBtn.hidden = true;
+      alreadyBox.hidden = true;
+    } else if (existing && !existing.replay_allowed){
       joinBtn.hidden = true;
       alreadyBox.hidden = false;
       document.getElementById("marathon-already-joined-stats").innerHTML = `
@@ -86,7 +92,10 @@ const Marathon = (function(){
         <span>نقاط الماراثون: ${existing.marathon_score || 0}</span>
       `;
     } else {
-      joinBtn.hidden = m.status === "started"; // لا انضمام بعد بدء الحدث فعليًا
+      // الحدث بدأ فعليًا — يظهر الزر الآن. المشرف "يقبل" انضمام أي لاعب في
+      // أي وقت أثناء الحدث؛ إن انضم مبكرًا (لا يزال ضمن نافذة السؤال الأول)
+      // يلعب فعليًا، وإلا يدخل مباشرة كمتفرّج فقط (راجع onClickJoin)
+      joinBtn.hidden = false;
       alreadyBox.hidden = true;
     }
 
@@ -117,17 +126,45 @@ const Marathon = (function(){
   async function onClickJoin(){
     if (!activeMarathon || !AppState.profile) return;
     const p = AppState.profile;
+
+    // زر الانضمام لا يظهر أصلاً قبل بدء الحدث (راجع renderDashboardAnnouncement)،
+    // لكن هذا تحقّق دفاعي إضافي احتياطًا
+    if (activeMarathon.status !== "started"){
+      showToast("لم يبدأ الماراثون بعد");
+      return;
+    }
+
     const existing = await QV.getMarathonPlayer(activeMarathon.id, p.id);
     if (existing && !existing.replay_allowed){
       showToast("لقد شاركت في هذا الماراثون من قبل");
       return;
     }
+
+    currentMarathon = activeMarathon;
+    currentPlayerObj = { userId: p.id, name: p.username, avatar: p.avatar, age: p.age };
+    QVSound.click();
+
+    // المشرف يقبل انضمام أي لاعب في أي وقت أثناء الحدث. إن كان لا يزال ضمن
+    // نافذة السؤال الأول (عادل لكل اللاعبين)، ينضم فعليًا كمشارك يلعب. أما
+    // إن تأخّر عن ذلك، فلا يمكنه اللعب فعليًا (سيكون قد فاته إجابة أسئلة لم
+    // يرها) — يدخل مباشرة كمتفرّج فقط دون تسجيل أي محاولة لعب له
     try{
-      currentPlayerObj = { userId: p.id, name: p.username, avatar: p.avatar, age: p.age };
-      currentPlayerRow = await QV.joinMarathon(activeMarathon.id, currentPlayerObj);
-      currentMarathon = activeMarathon;
-      QVSound.click();
-      await enterWaitingRoom();
+      const timePerQ = currentMarathon.use_age_based_timer
+        ? await QV.resolveQuestionTimer({ age: ageGroupToRange(p.age).min, category: currentMarathon.category })
+        : (currentMarathon.time_per_question || 15);
+      const elapsed = currentMarathon.actual_start_at
+        ? (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000
+        : Infinity;
+      const stillFairToJoin = elapsed < timePerQ;
+
+      if (stillFairToJoin){
+        currentPlayerRow = await QV.joinMarathon(currentMarathon.id, currentPlayerObj);
+        showToast("🏁 انضممت للماراثون! بالتوفيق 🍀");
+        await startGameplayLoop(true);
+      } else {
+        showToast("بدأ الماراثون بالفعل — يمكنك مشاهدته مباشرةً فقط الآن، دون احتساب محاولة لعب لك");
+        await enterSpectatorMode();
+      }
     }catch(err){
       showToast(err.message || "تعذّر الانضمام للماراثون");
     }
@@ -179,8 +216,13 @@ const Marathon = (function(){
     await startGameplayLoop();
   }
 
-  async function startGameplayLoop(){
+  /* skipIntro=true: يُستخدم عند انضمام لاعب بعد أن ضغط المشرف "ابدأ الآن"
+     فعليًا (لا غرفة انتظار ولا عدّ تنازلي مشترك بعد الآن — كل لاعب ينضم في
+     أي لحظة يختارها بنفسه) — ننتقل مباشرة للعب فورًا دون أي تأخير إضافي
+     يُهدر من وقته العادل ضمن نافذة السؤال الأول */
+  async function startGameplayLoop(skipIntro){
     clearInterval(gameTimerHandle);
+    if (skipIntro) goTo("screen-marathon-quiz");
     resolvedTimePerQuestion = currentMarathon.use_age_based_timer
       ? await QV.resolveQuestionTimer({ age: ageGroupToRange(currentPlayerObj.age).min, category: currentMarathon.category })
       : (currentMarathon.time_per_question || 15);
