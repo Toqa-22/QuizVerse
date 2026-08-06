@@ -1427,7 +1427,8 @@ const Admin = (function(){
     document.getElementById("maf-age-max").value = 99;
     document.getElementById("maf-max-players").value = 100;
     document.getElementById("maf-question-count").value = 50;
-    document.getElementById("maf-time").value = 15;
+    document.getElementById("maf-time-mc").value = 15;
+    document.getElementById("maf-time-tf").value = 10;
     document.getElementById("maf-err").textContent = "";
     document.getElementById("maf-time-group").hidden = true;
     openModal("modal-marathon");
@@ -1459,7 +1460,14 @@ const Admin = (function(){
       max_players: Number(document.getElementById("maf-max-players").value),
       question_count: Number(document.getElementById("maf-question-count").value),
       use_age_based_timer: timerMode === "age_based",
-      time_per_question: Number(document.getElementById("maf-time").value) || 15,
+      // في وضع "⏱️ وقت مخصص" يختار المشرف مدة مستقلة لكل نوع سؤال (اختيار من
+      // متعدد / صح-خطأ)؛ عمود time_per_question القديم يبقى كقيمة احتياطية
+      // فقط لأي نوع غير مُعرَّف صراحةً
+      custom_type_timers: timerMode === "custom" ? {
+        multiple_choice: Number(document.getElementById("maf-time-mc").value) || 15,
+        true_false: Number(document.getElementById("maf-time-tf").value) || 10,
+      } : null,
+      time_per_question: timerMode === "custom" ? (Number(document.getElementById("maf-time-mc").value) || 15) : 15,
       owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
     };
 
