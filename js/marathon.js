@@ -34,6 +34,8 @@ const Marathon = (function(){
   let currentQuestionIndex = -1;
   let answeredCurrentQuestion = true;
   let resolvedTimePerQuestion = 15;
+  let myQuestionOrder = [];   // نسخة مُبعثرة خاصة بهذا اللاعب من مجموعة الأسئلة الثابتة —
+                               // نفس الأسئلة لكل اللاعبين، لكن كل لاعب يراها بترتيب مختلف
 
   function init(){
     document.getElementById("btn-marathon-join").addEventListener("click", onClickJoin);
@@ -184,6 +186,11 @@ const Marathon = (function(){
       ? await QV.resolveQuestionTimer({ age: ageGroupToRange(currentPlayerObj.age).min, category: currentMarathon.category })
       : (currentMarathon.time_per_question || 15);
 
+    // كل لاعب يحصل على نفس مجموعة الأسئلة تمامًا، لكن بترتيب مُبعثر خاص به
+    // وحده (مزيج الفئات + خيارات كل سؤال تُخلط أيضًا بشكل مستقل عند عرضها) —
+    // بلا أي تكرار لنفس السؤال طالما لم تُستنفد المجموعة بأكملها بعد
+    myQuestionOrder = QV.shuffle((currentMarathon.question_set || []).slice());
+
     answeredCurrentQuestion = true;
     currentQuestionIndex = -1;
     tickMarathon();
@@ -195,7 +202,7 @@ const Marathon = (function(){
 
   async function tickMarathon(){
     if (!currentMarathon || !currentMarathon.actual_start_at) return;
-    const qs = currentMarathon.question_set || [];
+    const qs = myQuestionOrder;
     const elapsed = (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000;
     const idx = Math.floor(elapsed / resolvedTimePerQuestion);
 
