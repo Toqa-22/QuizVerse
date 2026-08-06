@@ -168,36 +168,23 @@ function showLevelUpPopup(level){
 function initSoundSettings(){
   const s = QVSound.getSettings();
   const sfxToggle = document.getElementById("snd-sfx-toggle");
-  const musicToggle = document.getElementById("snd-music-toggle");
   const sfxSlider = document.getElementById("snd-sfx-volume");
-  const musicSlider = document.getElementById("snd-music-volume");
   const sfxValue = document.getElementById("snd-sfx-value");
-  const musicValue = document.getElementById("snd-music-value");
   if (!sfxToggle) return;
 
   sfxToggle.checked = s.sfxEnabled;
-  musicToggle.checked = s.musicEnabled;
   sfxSlider.value = Math.round(s.sfxVolume * 100);
-  musicSlider.value = Math.round(s.musicVolume * 100);
   sfxValue.textContent = sfxSlider.value + "%";
-  musicValue.textContent = musicSlider.value + "%";
 
   sfxToggle.addEventListener("change", () => {
     QVSound.setSfxEnabled(sfxToggle.checked);
     if (sfxToggle.checked) QVSound.click();
-  });
-  musicToggle.addEventListener("change", () => {
-    QVSound.setMusicEnabled(musicToggle.checked);
   });
   sfxSlider.addEventListener("input", () => {
     sfxValue.textContent = sfxSlider.value + "%";
     QVSound.setSfxVolume(Number(sfxSlider.value) / 100);
   });
   sfxSlider.addEventListener("change", () => QVSound.click());
-  musicSlider.addEventListener("input", () => {
-    musicValue.textContent = musicSlider.value + "%";
-    QVSound.setMusicVolume(Number(musicSlider.value) / 100);
-  });
 }
 
 /* ---------------- theme (تبديل بين المظهر الفاتح والداكن) ---------------- */
@@ -592,7 +579,6 @@ async function startSoloQuiz(){
   goTo("screen-quiz");
   await playQuizCountdown();
   QVSound.start();
-  QVSound.startMusic();
   const p = AppState.profile;
   const range = ageGroupToRange(p.age);
   const [counts, timePerQuestion] = await Promise.all([
@@ -613,7 +599,7 @@ async function startSoloQuiz(){
     age: range.min,
     onFinish: (result) => window.onQuizFinished(result, false),
   });
-  if (!ok) { QVSound.stopMusic(); renderCategories(); goTo("screen-categories"); }
+  if (!ok) { renderCategories(); goTo("screen-categories"); }
 }
 
 /* ---------------- 🎲 Random Challenge (فئة/مستوى/عدد أسئلة/مؤقت عشوائي بالكامل) ---------------- */
@@ -696,8 +682,7 @@ function initRandomChallenge(){
     goTo("screen-quiz");
     await playQuizCountdown();
     QVSound.start();
-    QVSound.startMusic();
-
+  
     const comboKey = picked.category + ":" + picked.difficulty;
     const excludeIds = (p.recent_questions && p.recent_questions[comboKey]) || [];
     const ok = await QuizEngine.start({
@@ -711,12 +696,11 @@ function initRandomChallenge(){
       age: picked.ageRange.min,
       onFinish: (result) => window.onQuizFinished(result, false, null, true),
     });
-    if (!ok){ QVSound.stopMusic(); goTo("screen-dashboard"); }
+    if (!ok){ goTo("screen-dashboard"); }
   });
 }
 
 window.onQuizFinished = async function(result, isMultiplayer, gameId, isRandomChallenge){
-  QVSound.stopMusic();
 
   // اللعب المباشر: مكافأة سرعة بسيطة تُضاف لنقاط الاختبار الجماعي بحسب
   // متوسط زمن الإجابة (كلما كان اللاعب أسرع زادت المكافأة) — لا تُطبَّق على
