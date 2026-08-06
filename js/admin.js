@@ -92,8 +92,6 @@ const Admin = (function(){
     const options = QUIZ_CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join("");
     document.getElementById("qf-category").innerHTML = options;
     document.getElementById("gf-category").innerHTML = options;
-    const mafCat = document.getElementById("maf-category");
-    if (mafCat) mafCat.innerHTML = options;
   }
 
   async function onLogin(e){
@@ -1366,7 +1364,7 @@ const Admin = (function(){
     tbody.innerHTML = editingMarathons.map(m => `
       <tr>
         <td data-label="العنوان">${escapeHtml(m.title)}</td>
-        <td data-label="الفئة">${catIcon(m.category)} ${catName(m.category)}</td>
+        <td data-label="الفئة">🎲 مزيج (سهل ← صعب)</td>
         <td data-label="الموعد">${escapeHtml(m.start_date)} — ${escapeHtml(m.start_time)}</td>
         <td data-label="الحالة"><span class="mp-status ${m.status === "finished" ? "finished" : m.status === "started" ? "started" : "waiting"}">${MARATHON_STATUS_LABEL[m.status] || m.status}</span></td>
         <td data-label="المنضمّون">👥 ${m._playerCount}</td>
@@ -1448,8 +1446,10 @@ const Admin = (function(){
       id: document.getElementById("maf-id").value || undefined,
       title: document.getElementById("maf-title").value.trim(),
       description: document.getElementById("maf-desc").value.trim(),
-      category: document.getElementById("maf-category").value,
-      difficulty: document.getElementById("maf-difficulty").value,
+      // مزيج من كل الفئات دائمًا، وصعوبة تتصاعد تلقائيًا من سهل إلى صعب —
+      // تُبنى المجموعة الفعلية عند "ابدأ الآن" في QV.startMarathonNow
+      category: "mixed",
+      difficulty: "mixed",
       age_min: Number(document.getElementById("maf-age-min").value),
       age_max: Number(document.getElementById("maf-age-max").value),
       start_date: document.getElementById("maf-start-date").value,
