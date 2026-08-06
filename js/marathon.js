@@ -250,7 +250,7 @@ const Marathon = (function(){
      المخصص تعتمد على نوع هذا السؤال تحديدًا (اختيار من متعدد / صح-خطأ) */
   function durationForQuestion(q){
     if (currentMarathon.use_age_based_timer) return resolvedTimePerQuestion;
-    const type = q.type === "true_false" ? "true_false" : "multiple_choice";
+    const type = ["true_false", "matching", "ordering"].includes(q.type) ? q.type : "multiple_choice";
     const perType = currentMarathon.custom_type_timers || {};
     return perType[type] || currentMarathon.time_per_question || 15;
   }
@@ -297,12 +297,24 @@ const Marathon = (function(){
     document.getElementById("mq-text").textContent = q.question;
     document.getElementById("mq-survived").textContent = currentQuestionIndex;
 
+    const checkBtn = document.getElementById("mq-check-answer");
+    checkBtn.hidden = true;
+    checkBtn.onclick = null;
+
+    const type = q.type || "multiple_choice";
+    if (type === "matching") { renderMarathonMatching(q); return; }
+    if (type === "ordering") { renderMarathonOrdering(q); return; }
+    renderMarathonChoice(q, type);
+  }
+
+  /* ---------------- 1) اختيار من متعدد / صح-خطأ (تقييم فوري عند الضغط) ---------------- */
+  function renderMarathonChoice(q, type){
     const grid = document.getElementById("mq-options-grid");
     grid.innerHTML = "";
-    grid.className = "options-grid" + (q.type === "true_false" ? " options-grid--tf" : "");
+    grid.className = "options-grid" + (type === "true_false" ? " options-grid--tf" : "");
 
     let opts;
-    if (q.type === "true_false"){
+    if (type === "true_false"){
       opts = [
         { text: "صح", isCorrect: Number(q.correct_answer) === 1, tf: 1 },
         { text: "خطأ", isCorrect: Number(q.correct_answer) === 2, tf: 2 },
@@ -321,27 +333,262 @@ const Marathon = (function(){
     opts.forEach((opt, i) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "option-btn" + (q.type === "true_false" ? " option-btn--tf" : "");
-      btn.innerHTML = q.type === "true_false"
+      btn.className = "option-btn" + (type === "true_false" ? " option-btn--tf" : "");
+      btn.innerHTML = type === "true_false"
         ? `<span class="opt-letter">${opt.tf === 1 ? "✔" : "✖"}</span><span>${opt.text}</span>`
         : `<span class="opt-letter">${letters[i]}</span><span>${escapeHtmlLocal(opt.text)}</span>`;
-      btn.addEventListener("click", () => onMarathonAnswer(opt.isCorrect, btn, grid));
+      btn.addEventListener("click", () => onMarathonChoiceAnswer(opt.isCorrect, btn, grid));
       grid.appendChild(btn);
     });
   }
 
-  async function onMarathonAnswer(isCorrect, btnEl, grid){
+  async function onMarathonChoiceAnswer(isCorrect, btnEl, grid){
     if (answeredCurrentQuestion) return;
     answeredCurrentQuestion = true;
     Array.from(grid.children).forEach(b => { b.disabled = true; });
+    if (isCorrect) btnEl.classList.add("correct"); else btnEl.classList.add("wrong");
+    await resolveMarathonAnswer(isCorrect);
+  }
 
+  /* ---------------- 2) مطابقة (سحب وإفلات — نفس أسلوب الاختبار العادي) ----------------
+     البقاء في الماراثون يتطلّب مطابقة كل الأزواج بشكل صحيح (بلا نقاط جزئية،
+     تماشيًا مع طبيعة وضع البقاء: أي خطأ يُقصي اللاعب فورًا). */
+  function renderMarathonMatching(q){
+    const grid = document.getElementById("mq-options-grid");
+    grid.innerHTML = "";
+    grid.className = "options-grid options-grid--match";
+
+    const wrap = document.createElement("div");
+    wrap.className = "match-wrap";
+
+    const leftCol = document.createElement("div");
+    leftCol.className = "match-left";
+    leftCol.id = "mq-match-left";
+    (q.pairs || []).forEach((pair, i) => {
+      const row = document.createElement("div");
+      row.className = "match-row";
+      const label = document.createElement("span");
+      label.className = "match-left-label";
+      label.textContent = pair.left;
+      const zone = document.createElement("span");
+      zone.className = "match-drop-zone";
+      zone.dataset.leftIndex = String(i);
+      zone.textContent = "اسحب الإجابة هنا";
+      row.appendChild(label);
+      row.appendChild(zone);
+      leftCol.appendChild(row);
+    });
+
+    const bank = document.createElement("div");
+    bank.className = "match-bank";
+    bank.id = "mq-match-bank";
+    const shuffledRights = QV.shuffle((q.pairs || []).map(p => p.right).slice());
+    shuffledRights.forEach(r => {
+      const chip = document.createElement("div");
+      chip.className = "match-chip";
+      chip.dataset.value = r;
+      chip.textContent = r;
+      bank.appendChild(chip);
+    });
+
+    wrap.appendChild(leftCol);
+    wrap.appendChild(bank);
+    grid.appendChild(wrap);
+
+    initMarathonMatchingDrag();
+
+    const checkBtn = document.getElementById("mq-check-answer");
+    checkBtn.hidden = false;
+    checkBtn.disabled = true;
+    checkBtn.textContent = "تحقق من الإجابة";
+    checkBtn.onclick = () => submitMarathonMatching(q);
+  }
+
+  function initMarathonMatchingDrag(){
+    const bank = document.getElementById("mq-match-bank");
+    const zones = Array.from(document.querySelectorAll("#mq-match-left .match-drop-zone"));
+    const checkBtn = document.getElementById("mq-check-answer");
+
+    function updateCheckButtonState(){
+      checkBtn.disabled = !zones.every(z => z.dataset.assigned);
+    }
+
+    function wireChip(chip){
+      chip.addEventListener("pointerdown", (e) => {
+        if (answeredCurrentQuestion) return;
+        e.preventDefault();
+        const startX = e.clientX, startY = e.clientY;
+        const rect = chip.getBoundingClientRect();
+        try{ chip.setPointerCapture(e.pointerId); }catch(err){ /* ignore */ }
+        chip.classList.add("dragging");
+        chip.style.position = "fixed";
+        chip.style.left = rect.left + "px";
+        chip.style.top = rect.top + "px";
+        chip.style.width = rect.width + "px";
+        chip.style.zIndex = 60;
+
+        const onMove = (ev) => {
+          chip.style.left = (rect.left + (ev.clientX - startX)) + "px";
+          chip.style.top = (rect.top + (ev.clientY - startY)) + "px";
+          zones.forEach(z => z.classList.remove("drag-over"));
+          const target = document.elementFromPoint(ev.clientX, ev.clientY);
+          const zone = target && target.closest(".match-drop-zone");
+          if (zone) zone.classList.add("drag-over");
+        };
+        const onUp = (ev) => {
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          try{ chip.releasePointerCapture(ev.pointerId); }catch(err){ /* ignore */ }
+          chip.classList.remove("dragging");
+          chip.style.position = ""; chip.style.left = ""; chip.style.top = ""; chip.style.width = ""; chip.style.zIndex = "";
+          const target = document.elementFromPoint(ev.clientX, ev.clientY);
+          const zone = target && target.closest(".match-drop-zone");
+          zones.forEach(z => z.classList.remove("drag-over"));
+          if (zone && !answeredCurrentQuestion) assignChipToZone(chip, zone);
+          updateCheckButtonState();
+        };
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+      });
+    }
+
+    function assignChipToZone(chip, zone){
+      if (zone.dataset.assigned){
+        const returned = document.createElement("div");
+        returned.className = "match-chip";
+        returned.dataset.value = zone.dataset.assigned;
+        returned.textContent = zone.dataset.assigned;
+        bank.appendChild(returned);
+        wireChip(returned);
+      }
+      zone.dataset.assigned = chip.dataset.value;
+      zone.textContent = chip.dataset.value;
+      zone.classList.add("filled");
+      chip.remove();
+    }
+
+    bank.querySelectorAll(".match-chip").forEach(wireChip);
+    updateCheckButtonState();
+  }
+
+  async function submitMarathonMatching(q){
+    if (answeredCurrentQuestion) return;
+    answeredCurrentQuestion = true;
+    const zones = Array.from(document.querySelectorAll("#mq-match-left .match-drop-zone"));
+    let allCorrect = zones.length > 0;
+    zones.forEach(zone => {
+      const leftIndex = Number(zone.dataset.leftIndex);
+      const correctValue = (q.pairs || [])[leftIndex] ? q.pairs[leftIndex].right : null;
+      const isRight = zone.dataset.assigned === correctValue;
+      zone.classList.add(isRight ? "correct" : "wrong");
+      if (!isRight) allCorrect = false;
+    });
+    document.querySelectorAll("#mq-match-bank .match-chip").forEach(c => c.classList.add("dim"));
+    document.getElementById("mq-check-answer").hidden = true;
+    await resolveMarathonAnswer(allCorrect);
+  }
+
+  /* ---------------- 3) ترتيب (أزرار ⬆️/⬇️) ----------------
+     يتطلّب البقاء ترتيبًا صحيحًا بالكامل — بلا نقاط جزئية، خلافًا للاختبار
+     العادي، تماشيًا مع قاعدة "أي خطأ يُقصي" في وضع البقاء. */
+  function renderMarathonOrdering(q){
+    const grid = document.getElementById("mq-options-grid");
+    grid.innerHTML = "";
+    grid.className = "options-grid options-grid--order";
+    const shuffled = QV.shuffle((q.ordered_items || []).slice());
+    buildMarathonOrderList(shuffled);
+
+    const checkBtn = document.getElementById("mq-check-answer");
+    checkBtn.hidden = false;
+    checkBtn.disabled = false;
+    checkBtn.textContent = "تحقق من الترتيب";
+    checkBtn.onclick = () => submitMarathonOrdering(q);
+  }
+
+  function buildMarathonOrderList(items, highlightIndexes){
+    const list = document.createElement("div");
+    list.className = "order-list";
+    list.id = "mq-order-list";
+
+    items.forEach((item, i) => {
+      const row = document.createElement("div");
+      row.className = "order-item";
+      row.dataset.value = item;
+      if (highlightIndexes && highlightIndexes.includes(i)) row.classList.add("order-swapped");
+
+      const upBtn = document.createElement("button");
+      upBtn.type = "button";
+      upBtn.className = "order-move-btn order-move-up";
+      upBtn.textContent = "⬆️";
+      upBtn.setAttribute("aria-label", "نقل العنصر للأعلى");
+      upBtn.disabled = i === 0;
+      upBtn.addEventListener("click", () => moveMarathonOrderItem(i, -1));
+
+      const text = document.createElement("span");
+      text.className = "order-text";
+      text.textContent = item;
+
+      const downBtn = document.createElement("button");
+      downBtn.type = "button";
+      downBtn.className = "order-move-btn order-move-down";
+      downBtn.textContent = "⬇️";
+      downBtn.setAttribute("aria-label", "نقل العنصر للأسفل");
+      downBtn.disabled = i === items.length - 1;
+      downBtn.addEventListener("click", () => moveMarathonOrderItem(i, 1));
+
+      row.appendChild(upBtn);
+      row.appendChild(text);
+      row.appendChild(downBtn);
+      list.appendChild(row);
+    });
+
+    const grid = document.getElementById("mq-options-grid");
+    grid.innerHTML = "";
+    grid.appendChild(list);
+  }
+
+  function moveMarathonOrderItem(index, direction){
+    if (answeredCurrentQuestion) return;
+    const oldList = document.getElementById("mq-order-list");
+    const items = Array.from(oldList.querySelectorAll(".order-item")).map(el => el.dataset.value);
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= items.length) return;
+
+    [items[index], items[newIndex]] = [items[newIndex], items[index]];
+    QVSound.click();
+    buildMarathonOrderList(items, [index, newIndex]);
+
+    setTimeout(() => {
+      document.querySelectorAll("#mq-order-list .order-swapped").forEach(el => el.classList.remove("order-swapped"));
+    }, 350);
+  }
+
+  async function submitMarathonOrdering(q){
+    if (answeredCurrentQuestion) return;
+    answeredCurrentQuestion = true;
+    const list = document.getElementById("mq-order-list");
+    const playerOrder = Array.from(list.querySelectorAll(".order-item")).map(el => el.dataset.value);
+    const correctOrder = q.ordered_items || [];
+    let allCorrect = playerOrder.length > 0;
+
+    Array.from(list.querySelectorAll(".order-item")).forEach((row, i) => {
+      const isRight = playerOrder[i] === correctOrder[i];
+      row.classList.add(isRight ? "correct" : "wrong");
+      row.querySelectorAll(".order-move-btn").forEach(b => { b.disabled = true; });
+      if (!isRight) allCorrect = false;
+    });
+
+    document.getElementById("mq-check-answer").hidden = true;
+    await resolveMarathonAnswer(allCorrect);
+  }
+
+  /* ---------------- نقطة تسوية مشتركة لكل الأنواع الأربعة ---------------- */
+  async function resolveMarathonAnswer(isCorrect){
     if (isCorrect){
-      btnEl.classList.add("correct");
       QVSound.correct();
       fireConfettiBurst(14);
       spawnMarathonFloating("🔥 لا زلت صامدًا!", "reward");
     } else {
-      btnEl.classList.add("wrong");
       QVSound.wrong();
       if (navigator.vibrate) navigator.vibrate(180);
     }
