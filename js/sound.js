@@ -1,17 +1,16 @@
 /* =========================================================
    مؤثرات صوتية بسيطة عبر WebAudio API (بدون ملفات خارجية)، مع نظام إعدادات
-   صوت كامل (تفعيل/إيقاف المؤثرات، تفعيل/إيقاف الموسيقى الخلفية، ومستوى صوت
-   مستقل لكل منهما) محفوظ في localStorage ويُستعاد تلقائيًا عند كل زيارة —
-   بغض النظر عن تسجيل الدخول، لأنه إعداد خاص بالمتصفح/الجهاز.
+   صوت (تفعيل/إيقاف المؤثرات، ومستوى صوتها) محفوظ في localStorage ويُستعاد
+   تلقائيًا عند كل زيارة — بغض النظر عن تسجيل الدخول، لأنه إعداد خاص
+   بالمتصفح/الجهاز.
    ========================================================= */
 
 const QVSound = (function(){
   const LS_KEY = "qv_sound_settings";
-  const DEFAULTS = { sfxEnabled: true, musicEnabled: false, sfxVolume: 0.7, musicVolume: 0.4 };
+  const DEFAULTS = { sfxEnabled: true, sfxVolume: 0.7 };
 
   let settings = loadSettings();
   let ctx = null;
-  let musicNodes = null; // { oscA, oscB, lfo, gain } عند تشغيل الموسيقى الخلفية
 
   function loadSettings(){
     try{
@@ -48,42 +47,6 @@ const QVSound = (function(){
     }catch(e){ /* audio not available, fail silently */ }
   }
 
-  /* ---------------- موسيقى خلفية بسيطة (وسادة صوتية هادئة تتكرر، بلا ملفات خارجية) ---------------- */
-  function startMusic(){
-    if (!settings.musicEnabled || musicNodes) return;
-    try{
-      const c = getCtx();
-      const gain = c.createGain();
-      gain.gain.value = 0.05 * settings.musicVolume;
-      gain.connect(c.destination);
-
-      const oscA = c.createOscillator();
-      oscA.type = "sine"; oscA.frequency.value = 196; // G3
-      const oscB = c.createOscillator();
-      oscB.type = "sine"; oscB.frequency.value = 246.94; // B3
-
-      // ذبذبة بطيئة جدًا (LFO) تُحرّك مستوى الصوت بلطف لإحساس "تنفّس" هادئ
-      const lfo = c.createOscillator();
-      lfo.type = "sine"; lfo.frequency.value = 0.08;
-      const lfoGain = c.createGain();
-      lfoGain.gain.value = 0.025 * settings.musicVolume;
-      lfo.connect(lfoGain).connect(gain.gain);
-
-      oscA.connect(gain); oscB.connect(gain);
-      oscA.start(); oscB.start(); lfo.start();
-      musicNodes = { oscA, oscB, lfo, gain };
-    }catch(e){ /* audio not available */ }
-  }
-
-  function stopMusic(){
-    if (!musicNodes) return;
-    try{
-      musicNodes.oscA.stop(); musicNodes.oscB.stop(); musicNodes.lfo.stop();
-      musicNodes.oscA.disconnect(); musicNodes.oscB.disconnect(); musicNodes.lfo.disconnect(); musicNodes.gain.disconnect();
-    }catch(e){ /* ignore */ }
-    musicNodes = null;
-  }
-
   return {
     correct(){ tone(660,0.12,"sine",0.15,0); tone(880,0.18,"sine",0.15,0.1); },
     wrong(){ tone(180,0.28,"sawtooth",0.12,0); },
@@ -106,17 +69,6 @@ const QVSound = (function(){
     // ---------------- إعدادات الصوت ----------------
     getSettings(){ return { ...settings }; },
     setSfxEnabled(v){ settings.sfxEnabled = !!v; persist(); },
-    setMusicEnabled(v){
-      settings.musicEnabled = !!v; persist();
-      if (settings.musicEnabled) startMusic(); else stopMusic();
-    },
     setSfxVolume(v){ settings.sfxVolume = Math.max(0, Math.min(1, v)); persist(); },
-    setMusicVolume(v){
-      settings.musicVolume = Math.max(0, Math.min(1, v)); persist();
-      if (musicNodes){
-        musicNodes.gain.gain.value = 0.05 * settings.musicVolume;
-      }
-    },
-    startMusic, stopMusic,
   };
 })();
