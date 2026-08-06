@@ -101,6 +101,7 @@ const QVSound = (function(){
     coins(){ tone(988,0.07,"square",0.1,0); tone(1319,0.1,"square",0.1,0.06); },
     combo(){ tone(740,0.08,"triangle",0.13,0); tone(988,0.12,"triangle",0.13,0.06); },
     speedBonus(){ tone(880,0.08,"triangle",0.14,0); tone(1175,0.14,"triangle",0.14,0.05); },
+    eliminated(){ tone(400,0.12,"sawtooth",0.14,0); tone(260,0.16,"sawtooth",0.13,0.1); tone(140,0.32,"sawtooth",0.12,0.24); },
 
     // ---------------- إعدادات الصوت ----------------
     getSettings(){ return { ...settings }; },
