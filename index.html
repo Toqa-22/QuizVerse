@@ -613,6 +613,7 @@
       <p class="q-meta"><span id="mq-category-badge"></span></p>
       <h2 class="q-text" id="mq-text">نص السؤال هنا</h2>
       <div class="options-grid" id="mq-options-grid"><!-- injected --></div>
+      <button type="button" class="btn btn-primary btn-block btn-check-answer" id="mq-check-answer" hidden>تحقق من الإجابة</button>
       <div class="floating-layer" id="mq-floating-layer" aria-hidden="true"></div>
     </div>
   </section>
@@ -1100,8 +1101,13 @@
     </div>
 
     <div class="field-grid">
-      <div class="field" id="gf-time-group"><label>الوقت لكل سؤال (ثانية)</label><input type="number" id="gf-time" value="15"></div>
       <div class="field"><label>الحد الأقصى للاعبين</label><input type="number" id="gf-maxplayers" value="20" required></div>
+    </div>
+    <div class="field-grid" id="gf-time-group">
+      <div class="field"><label>وقت سؤال الاختيار من متعدد (ثانية)</label><input type="number" id="gf-time-mc" min="5" value="15"></div>
+      <div class="field"><label>وقت سؤال صح/خطأ (ثانية)</label><input type="number" id="gf-time-tf" min="5" value="10"></div>
+      <div class="field"><label>وقت سؤال المطابقة (ثانية)</label><input type="number" id="gf-time-matching" min="5" value="25"></div>
+      <div class="field"><label>وقت سؤال الترتيب (ثانية)</label><input type="number" id="gf-time-ordering" min="5" value="20"></div>
     </div>
     <div class="field-grid">
       <div class="field"><label>العمر الأدنى</label><input type="number" id="gf-age-min" value="5" required></div>
@@ -1230,6 +1236,8 @@
     <div class="field-grid" id="maf-time-group" hidden>
       <div class="field"><label>وقت سؤال الاختيار من متعدد (ثانية)</label><input type="number" id="maf-time-mc" min="5" value="15"></div>
       <div class="field"><label>وقت سؤال صح/خطأ (ثانية)</label><input type="number" id="maf-time-tf" min="5" value="10"></div>
+      <div class="field"><label>وقت سؤال المطابقة (ثانية)</label><input type="number" id="maf-time-matching" min="5" value="25"></div>
+      <div class="field"><label>وقت سؤال الترتيب (ثانية)</label><input type="number" id="maf-time-ordering" min="5" value="20"></div>
     </div>
 
     <span class="field-error" id="maf-err"></span>
