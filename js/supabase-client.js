@@ -1141,20 +1141,46 @@ const QV = (function(){
 
   /* يُولّد مجموعة الأسئلة الثابتة (نفسها ونفس ترتيبها لكل اللاعبين لعدالة
      المنافسة، تمامًا كآلية بدء الغرف الجماعية) ويضبط اللحظة الفعلية للبدء */
+  /* يُولّد مجموعة الأسئلة الثابتة (نفس الأسئلة لكل اللاعبين لعدالة المنافسة،
+     لكن كل لاعب يرى ترتيبها بترتيب مُبعثر خاص به — راجع marathon.js) ويضبط
+     اللحظة الفعلية للبدء. اعتبارًا من هذا التحديث:
+       • الفئة المعرفية دائمًا "مزيج" من كل الفئات المتاحة، وليست فئة واحدة
+       • مستوى الصعوبة يتصاعد تلقائيًا من سهل إلى متوسط إلى صعب على طول
+         مسبح الأسئلة (لا يختاره المشرف يدويًا بعد الآن)
+       • كل سؤال يظهر مرة واحدة فقط بالضبط ضمن هذا المسبح (بلا أي تكرار) */
   async function startMarathonNow(id){
     const all = await getMarathons();
     const m = all.find(x => x.id === id);
     if (!m) throw new Error("الماراثون غير موجود");
-    // نقتصر على أسئلة "اختيار من متعدد" و"صح/خطأ" فقط لوضع الماراثون — أنسب
-    // نوعين لإيقاع سريع يتطلّب إجابة فورية لحظة ظهور كل سؤال، ويبسّطان عرض
-    // اللعب بشكل موثوق لكل اللاعبين والمتفرجين في آنٍ واحد
-    const pool = await getQuestions({
-      category: m.category, ageMin: m.age_min, ageMax: m.age_max, difficulty: m.difficulty,
-    });
+
+    const pool = await getQuestions({ ageMin: m.age_min, ageMax: m.age_max });
     const filtered = pool.filter(q => (q.type || "multiple_choice") === "multiple_choice" || q.type === "true_false");
-    const questionSet = shuffle(filtered.slice()).slice(0, m.question_count);
-    if (!questionSet.length) throw new Error("لا توجد أسئلة كافية (اختيار من متعدد/صح-خطأ) مطابقة لإعدادات هذا الماراثون");
-    return saveMarathon({ id, status: "started", actual_start_at: new Date().toISOString(), question_set: questionSet });
+    if (!filtered.length) throw new Error("لا توجد أسئلة كافية (اختيار من متعدد/صح-خطأ) مطابقة للفئة العمرية المحددة");
+
+    const byDiff = { easy: [], medium: [], hard: [] };
+    filtered.forEach(q => { (byDiff[q.difficulty] || byDiff.medium).push(q); });
+    byDiff.easy = shuffle(byDiff.easy.slice());
+    byDiff.medium = shuffle(byDiff.medium.slice());
+    byDiff.hard = shuffle(byDiff.hard.slice());
+
+    // نُقسّم عدد الأسئلة المطلوب إلى ثلاث حصص متساوية تقريبًا: سهل ثم متوسط
+    // ثم صعب — بحيث يبدأ الماراثون سهلاً ويتصاعد تدريجيًا نحو الأصعب كلما
+    // تقدّم اللاعبون الناجون، مع سدّ أي نقص في مستوى معيّن من بقية المستويات
+    // حتى نصل للعدد المطلوب قدر الإمكان (بلا أي تكرار لنفس السؤال إطلاقًا)
+    const perBand = Math.ceil(m.question_count / 3);
+    let ordered = [...byDiff.easy.slice(0, perBand), ...byDiff.medium.slice(0, perBand), ...byDiff.hard.slice(0, perBand)];
+    if (ordered.length < m.question_count){
+      const usedIds = new Set(ordered.map(q => q.id));
+      const remainder = [...byDiff.easy, ...byDiff.medium, ...byDiff.hard].filter(q => !usedIds.has(q.id));
+      ordered = ordered.concat(remainder.slice(0, m.question_count - ordered.length));
+    }
+    ordered = ordered.slice(0, m.question_count);
+
+    if (!ordered.length) throw new Error("لا توجد أسئلة كافية (اختيار من متعدد/صح-خطأ) مطابقة للفئة العمرية المحددة");
+    return saveMarathon({
+      id, status: "started", actual_start_at: new Date().toISOString(), question_set: ordered,
+      category: "mixed", difficulty: "mixed",
+    });
   }
 
   async function getMarathonPlayers(marathonId){
