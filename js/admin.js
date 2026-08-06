@@ -15,7 +15,7 @@ const Admin = (function(){
   // اللوحات المتاحة للمشرف الرئيسي فقط — يُمنع المشرف الفرعي من الوصول إليها
   // حتى لو حاول تفعيلها يدويًا (حماية إضافية من جهة الواجهة، إلى جانب إخفاء
   // أزرارها بالكامل من القائمة الجانبية)
-  const ADMIN_ONLY_PANELS = new Set(["panel-stats", "panel-settings", "panel-age-timers", "panel-players", "panel-subadmins", "panel-activity", "panel-suggestions"]);
+  const ADMIN_ONLY_PANELS = new Set(["panel-stats", "panel-settings", "panel-age-timers", "panel-players", "panel-subadmins", "panel-activity", "panel-suggestions", "panel-marathon"]);
   // لوحة خاصة بالمشرف الفرعي فقط — لا تظهر إطلاقًا للمشرف الرئيسي (الذي يملك
   // أصلاً لوحة "👤 اللاعبون" الشاملة الأكثر تفصيلاً)
   const SUBADMIN_ONLY_PANELS = new Set(["panel-subadmin-stats"]);
@@ -75,6 +75,16 @@ const Admin = (function(){
     document.getElementById("btn-close-room-players").addEventListener("click", () => closeModal("modal-room-players"));
     document.getElementById("form-category").addEventListener("submit", onAddCategory);
 
+    document.getElementById("btn-new-marathon").addEventListener("click", () => openMarathonModal());
+    document.getElementById("form-marathon").addEventListener("submit", onSaveMarathon);
+    document.getElementById("btn-cancel-marathon").addEventListener("click", () => closeModal("modal-marathon"));
+    document.getElementById("btn-close-marathon-players").addEventListener("click", () => closeModal("modal-marathon-players"));
+    document.querySelectorAll('input[name="maf-timer-mode"]').forEach(radio => {
+      radio.addEventListener("change", () => {
+        document.getElementById("maf-time-group").hidden = radio.value === "age_based";
+      });
+    });
+
     populateCategorySelects();
   }
 
@@ -82,6 +92,8 @@ const Admin = (function(){
     const options = QUIZ_CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join("");
     document.getElementById("qf-category").innerHTML = options;
     document.getElementById("gf-category").innerHTML = options;
+    const mafCat = document.getElementById("maf-category");
+    if (mafCat) mafCat.innerHTML = options;
   }
 
   async function onLogin(e){
@@ -186,6 +198,7 @@ const Admin = (function(){
     if (id === "panel-activity") renderActivityLogTable();
     if (id === "panel-suggestions") renderSuggestionsTable();
     if (id === "panel-subadmin-stats") renderSubAdminStatsTable();
+    if (id === "panel-marathon") renderMarathonTable();
   }
 
   /* ---------------- stats ---------------- */
@@ -1338,6 +1351,174 @@ const Admin = (function(){
         <td data-label="عدد غرفك التي شارك فيها">${r.roomsPlayed}</td>
       </tr>
     `).join("") : `<tr><td colspan="4" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون في غرفك بعد</td></tr>`;
+  }
+
+  /* ---------------- 🏁 Marathon management (main admin only) ---------------- */
+  let editingMarathons = [];
+  const MARATHON_STATUS_LABEL = { draft: "مسودة", published: "منشور", started: "جارٍ الآن", finished: "منتهٍ" };
+
+  async function renderMarathonTable(){
+    editingMarathons = await QV.getMarathons();
+    const counts = await Promise.all(editingMarathons.map(m => QV.getMarathonPlayers(m.id)));
+    editingMarathons.forEach((m, i) => { m._playerCount = counts[i].length; });
+
+    const tbody = document.getElementById("marathon-tbody");
+    tbody.innerHTML = editingMarathons.map(m => `
+      <tr>
+        <td data-label="العنوان">${escapeHtml(m.title)}</td>
+        <td data-label="الفئة">${catIcon(m.category)} ${catName(m.category)}</td>
+        <td data-label="الموعد">${escapeHtml(m.start_date)} — ${escapeHtml(m.start_time)}</td>
+        <td data-label="الحالة"><span class="mp-status ${m.status === "finished" ? "finished" : m.status === "started" ? "started" : "waiting"}">${MARATHON_STATUS_LABEL[m.status] || m.status}</span></td>
+        <td data-label="المنضمّون">👥 ${m._playerCount}</td>
+        <td class="table-actions" data-label="">
+          ${m.status === "draft" ? `<button data-publish-mar="${m.id}">📢 نشر</button>` : ""}
+          ${m.status === "published" ? `<button data-start-mar="${m.id}">🏁 ابدأ الآن</button>` : ""}
+          ${m.status === "started" ? `<button data-finish-mar="${m.id}">🏆 إنهاء الآن</button>` : ""}
+          <button data-players-mar="${m.id}" data-title="${escapeHtml(m.title)}">👥 اللاعبون</button>
+          <button data-del-mar="${m.id}" class="danger">حذف</button>
+        </td>
+      </tr>
+    `).join("") || `<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">لا يوجد ماراثونات بعد</td></tr>`;
+
+    tbody.querySelectorAll("[data-publish-mar]").forEach(b => b.addEventListener("click", () => onPublishMarathon(b.dataset.publishMar)));
+    tbody.querySelectorAll("[data-start-mar]").forEach(b => b.addEventListener("click", () => onStartMarathon(b.dataset.startMar)));
+    tbody.querySelectorAll("[data-finish-mar]").forEach(b => b.addEventListener("click", () => onFinishMarathon(b.dataset.finishMar)));
+    tbody.querySelectorAll("[data-players-mar]").forEach(b => b.addEventListener("click", () => openMarathonPlayersModal(b.dataset.playersMar, b.dataset.title)));
+    tbody.querySelectorAll("[data-del-mar]").forEach(b => b.addEventListener("click", () => onDeleteMarathon(b.dataset.delMar)));
+  }
+
+  async function onPublishMarathon(id){
+    try{
+      await QV.saveMarathon({ id, status: "published" });
+      showToast("تم نشر الماراثون — سيظهر الآن للاعبين على لوحتهم الرئيسية 📢");
+      await renderMarathonTable();
+    }catch(err){ showToast(err.message || "تعذّر نشر الماراثون"); }
+  }
+
+  async function onStartMarathon(id){
+    if (!confirm("بدء الماراثون الآن سيولّد مجموعة الأسئلة ويبدأ العدّ الفعلي لكل اللاعبين المنضمّين. متابعة؟")) return;
+    try{
+      await QV.startMarathonNow(id);
+      showToast("🏁 بدأ الماراثون! سينتقل كل اللاعبين المنضمّين للعدّ التنازلي تلقائيًا");
+      await renderMarathonTable();
+    }catch(err){ showToast(err.message || "تعذّر بدء الماراثون"); }
+  }
+
+  async function onFinishMarathon(id){
+    if (!confirm("إنهاء الماراثون الآن سيحسم الترتيب النهائي ويمنح جوائز المراكز الثلاثة الأولى، ويضيف نقاط الماراثون لإجمالي نقاط كل مشارك. لا يمكن التراجع عن هذا. متابعة؟")) return;
+    try{
+      await QV.finalizeMarathon(id);
+      showToast("🏆 تم إنهاء الماراثون وحُسم الترتيب النهائي ومُنحت الجوائز ✔");
+      await renderMarathonTable();
+    }catch(err){ showToast(err.message || "تعذّر إنهاء الماراثون"); console.error(err); }
+  }
+
+  async function onDeleteMarathon(id){
+    if (!confirm("حذف هذا الماراثون نهائيًا؟ سيُحذف معه كل سجلّات مشاركة اللاعبين فيه.")) return;
+    try{
+      await QV.deleteMarathon(id);
+      showToast("تم حذف الماراثون");
+      await renderMarathonTable();
+    }catch(err){ showToast("تعذّر حذف الماراثون"); console.error(err); }
+  }
+
+  function openMarathonModal(){
+    document.getElementById("form-marathon").reset();
+    document.getElementById("maf-id").value = "";
+    document.getElementById("maf-age-min").value = 5;
+    document.getElementById("maf-age-max").value = 99;
+    document.getElementById("maf-max-players").value = 100;
+    document.getElementById("maf-question-count").value = 50;
+    document.getElementById("maf-time").value = 15;
+    document.getElementById("maf-err").textContent = "";
+    document.getElementById("maf-time-group").hidden = true;
+    openModal("modal-marathon");
+  }
+
+  async function onSaveMarathon(e){
+    e.preventDefault();
+    const errEl = document.getElementById("maf-err");
+    errEl.textContent = "";
+
+    const timerMode = document.querySelector('input[name="maf-timer-mode"]:checked').value;
+    const regOpenRaw = document.getElementById("maf-reg-open").value;
+    const regCloseRaw = document.getElementById("maf-reg-close").value;
+
+    const payload = {
+      id: document.getElementById("maf-id").value || undefined,
+      title: document.getElementById("maf-title").value.trim(),
+      description: document.getElementById("maf-desc").value.trim(),
+      category: document.getElementById("maf-category").value,
+      difficulty: document.getElementById("maf-difficulty").value,
+      age_min: Number(document.getElementById("maf-age-min").value),
+      age_max: Number(document.getElementById("maf-age-max").value),
+      start_date: document.getElementById("maf-start-date").value,
+      start_time: document.getElementById("maf-start-time").value,
+      registration_open_at: regOpenRaw ? new Date(regOpenRaw).toISOString() : null,
+      registration_close_at: regCloseRaw ? new Date(regCloseRaw).toISOString() : null,
+      max_players: Number(document.getElementById("maf-max-players").value),
+      question_count: Number(document.getElementById("maf-question-count").value),
+      use_age_based_timer: timerMode === "age_based",
+      time_per_question: Number(document.getElementById("maf-time").value) || 15,
+      owner_username: currentRole === "subadmin" ? currentAdminUsername : null,
+    };
+
+    if (!payload.title){ errEl.textContent = "الرجاء كتابة عنوان الماراثون"; return; }
+    if (!payload.start_date || !payload.start_time){ errEl.textContent = "الرجاء تحديد تاريخ ووقت البدء"; return; }
+
+    try{
+      await QV.saveMarathon(payload);
+      closeModal("modal-marathon");
+      showToast("تم حفظ الماراثون كمسودة ✔ — اضغط \"📢 نشر\" لإظهاره للاعبين");
+      await renderMarathonTable();
+    }catch(err){
+      errEl.textContent = err.message || "تعذّر حفظ الماراثون";
+    }
+  }
+
+  /* ---------------- 🏁 marathon player management (allow replay / reset) ---------------- */
+  let currentMarathonPlayersId = null;
+
+  async function openMarathonPlayersModal(marathonId, title){
+    currentMarathonPlayersId = marathonId;
+    document.getElementById("marathon-players-modal-title").textContent = `👥 لاعبو ماراثون "${title}"`;
+    await renderMarathonPlayersTable(marathonId);
+    openModal("modal-marathon-players");
+  }
+
+  async function renderMarathonPlayersTable(marathonId){
+    const players = await QV.getMarathonPlayers(marathonId);
+    const statusLabel = { alive: "حيّ الآن", eliminated: "مُقصى", finished: "أنهى", spectating: "يشاهد" };
+    const tbody = document.getElementById("marathon-players-tbody");
+    tbody.innerHTML = players.length ? players.map(p => `
+      <tr>
+        <td data-label="اللاعب">${p.avatar || "🙂"} ${escapeHtml(p.username)}</td>
+        <td data-label="الحالة">${statusLabel[p.status] || p.status}${p.replay_allowed ? " · 🔓 مسموح بالإعادة" : ""}</td>
+        <td data-label="المحاولات">${p.attempts || 1}</td>
+        <td data-label="النقاط">${p.marathon_score || 0}</td>
+        <td data-label="الترتيب">${p.rank ? "#" + p.rank : "—"}</td>
+        <td class="table-actions" data-label="">
+          <button data-allow-replay="${p.user_id}">🔓 سماح بإعادة اللعب</button>
+          <button data-reset-attempt="${p.user_id}" class="danger">↺ تصفير المحاولة</button>
+        </td>
+      </tr>
+    `).join("") : `<tr><td colspan="6" class="muted" style="text-align:center;padding:20px">لا يوجد لاعبون في هذا الماراثون بعد</td></tr>`;
+
+    tbody.querySelectorAll("[data-allow-replay]").forEach(b => b.addEventListener("click", async () => {
+      try{
+        await QV.allowMarathonReplay(marathonId, b.dataset.allowReplay);
+        showToast("تم السماح للاعب بإعادة الانضمام للماراثون ✔");
+        await renderMarathonPlayersTable(marathonId);
+      }catch(err){ showToast(err.message || "تعذّر التنفيذ"); }
+    }));
+    tbody.querySelectorAll("[data-reset-attempt]").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("تصفير محاولة هذا اللاعب بالكامل في هذا الماراثون؟")) return;
+      try{
+        await QV.resetMarathonAttempt(marathonId, b.dataset.resetAttempt);
+        showToast("تم تصفير محاولة اللاعب ✔");
+        await renderMarathonPlayersTable(marathonId);
+      }catch(err){ showToast(err.message || "تعذّر التنفيذ"); }
+    }));
   }
 
   function escapeHtml(str){
