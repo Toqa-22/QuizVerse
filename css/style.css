@@ -424,7 +424,7 @@ a{color:var(--violet-dark)}
 .results-score{margin:10px 0 20px}
 .results-score strong{font-family:var(--font-display);font-size:2.6rem;color:var(--violet-dark);font-weight:900}
 .results-score span{color:var(--ink-2);margin-inline-start:6px;font-weight:700}
-.results-stats{display:flex;justify-content:center;gap:28px;margin-bottom:26px}
+.results-stats{display:flex;justify-content:center;flex-wrap:wrap;gap:28px;margin-bottom:26px}
 .results-stats strong{display:block;font-size:1.3rem;font-weight:900}
 .results-stats span{font-size:.75rem;color:var(--ink-2);font-weight:600}
 .results-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
@@ -448,7 +448,7 @@ a{color:var(--violet-dark)}
 }
 .lb-info{flex:1;min-width:0}
 .lb-info strong{display:flex;align-items:center;gap:6px;font-weight:800;flex-wrap:wrap}
-.lb-substats{display:block;font-size:.72rem;color:var(--ink-2);font-weight:600;margin-top:2px}
+.lb-substats{display:block;font-size:.72rem;color:var(--ink-2);font-weight:600;margin-top:2px;word-break:break-word}
 .lb-you-tag{
   font-size:.65rem;font-weight:800;color:#fff;background:var(--violet-dark);
   padding:2px 8px;border-radius:var(--radius-pill);
@@ -613,10 +613,23 @@ a{color:var(--violet-dark)}
   .role-tabs{flex-direction:column}
   .match-row{flex-direction:column;align-items:stretch}
   .pair-row, .item-row{flex-wrap:wrap}
+  /* شريط الأيقونات العلوي: عدد الأيقونات زاد (ترتيب الغرف/المتصدرين/التحدي
+     العشوائي/الماراثون) — نُصغّرها ونُقلّص الفراغات بينها حتى لا يفيض
+     الشريط عن عرض الشاشة أو يتكسّر ترتيبه على الجوال */
+  .topbar{padding:10px 12px;gap:6px}
+  .topbar-actions{gap:5px}
+  .icon-btn{width:32px;height:32px;font-size:.85rem}
+  .score-pill{padding:5px 9px;font-size:.72rem;gap:4px}
+  .pill-label{display:none}
+  .lb-row{flex-wrap:wrap}
+  .lb-score{margin-inline-start:auto}
 }
 @media (max-width: 420px){
   .category-grid{grid-template-columns:1fr}
   .dist-grid{grid-template-columns:1fr}
+  .brand-mark{display:none}
+  .icon-btn{width:30px;height:30px;font-size:.8rem}
+  .topbar-actions{gap:4px}
 }
 
 /* ---------------- admin tables: card layout under 720px (no horizontal scroll) ---------------- */
@@ -764,6 +777,10 @@ a{color:var(--violet-dark)}
 }
 .btn-random-challenge:hover:not(:disabled){transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--border)}
 .btn-random-challenge:active:not(:disabled){transform:translate(0,0);box-shadow:3px 3px 0 var(--border)}
+.btn-random-challenge--alt{
+  background:linear-gradient(135deg,#22c1c3,#6d5bff,#22c1c3);
+  background-size:200% 200%;
+}
 @keyframes randomGradientShift{
   0%,100%{background-position:0% 50%}
   50%{background-position:100% 50%}
@@ -802,6 +819,58 @@ a{color:var(--violet-dark)}
 }
 .random-preview-reward p{margin:4px 0;font-size:.88rem}
 .random-preview-reward strong{color:#ff8a00}
+
+/* ================= 🏁 marathon mode ================= */
+.marathon-announce-card{
+  position:relative;overflow:hidden;border-radius:var(--radius-lg);margin-bottom:20px;
+  background:linear-gradient(160deg,var(--surface),var(--surface-tint));
+  border:3px solid #ffb020;padding:22px;
+  animation:marathonFloat 3.5s ease-in-out infinite;
+}
+.marathon-announce-glow{
+  position:absolute;inset:-40%;background:radial-gradient(circle,rgba(255,176,32,.25),transparent 70%);
+  animation:levelUpGlow 2.4s ease-in-out infinite;pointer-events:none;
+}
+.marathon-announce-body{position:relative;z-index:1}
+.marathon-announce-eyebrow{font-weight:900;color:#ff8a00;margin:0 0 2px}
+.marathon-announce-meta{display:flex;flex-wrap:wrap;gap:16px;margin:14px 0}
+.marathon-announce-meta>div{display:flex;flex-direction:column;gap:2px;font-size:.82rem}
+.marathon-announce-meta strong{font-size:1.15rem}
+.marathon-already-joined{
+  margin-top:12px;padding:12px 14px;border-radius:var(--radius-sm);
+  background:var(--surface-tint);border:2px dashed var(--border-soft);
+}
+.marathon-already-joined-stats{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:.85rem}
+@keyframes marathonFloat{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+
+.marathon-waiting-wrap{max-width:460px;margin:40px auto;text-align:center;padding:36px 28px}
+.marathon-waiting-count{margin:18px 0}
+.marathon-waiting-count strong{font-size:2.4rem;display:block;line-height:1}
+.marathon-ready-badge{
+  display:inline-block;padding:6px 16px;border-radius:var(--radius-pill);
+  background:var(--green);color:#fff;font-weight:800;margin-bottom:10px;
+}
+
+.marathon-live-bar{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:14px}
+.marathon-live-chip{
+  padding:6px 14px;border-radius:var(--radius-pill);background:var(--surface-tint);
+  border:2px solid var(--border-soft);font-weight:700;font-size:.85rem;
+}
+.marathon-live-chip--remaining{background:linear-gradient(135deg,#ff5c8a,#ff8a00);color:#fff;border-color:transparent}
+
+.marathon-eliminated-wrap{max-width:420px;margin:60px auto;text-align:center;animation:fadeUp .5s var(--ease)}
+.marathon-eliminated-emoji{font-size:4.5rem;margin-bottom:10px;animation:shakeX .6s var(--ease)}
+.marathon-eliminated-wrap .btn{margin-top:10px;width:100%}
+
+.marathon-spectator-remaining{text-align:center;margin-bottom:18px}
+.marathon-spectator-remaining strong{font-size:2.2rem;display:block;color:#ff5c8a}
+.marathon-winner-card{
+  border:3px solid #ffb020 !important;
+  animation:levelUpZoomIn .6s cubic-bezier(.2,.8,.3,1.2), levelUpGlow 1.8s ease-in-out infinite .6s;
+}
 
 
 
