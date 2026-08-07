@@ -896,17 +896,13 @@ const QV = (function(){
     const isPerfect = result.total > 0 && result.correctCount === result.total;
     const perfectCount = (profile.random_challenge_perfect_count || 0) + (isPerfect ? 1 : 0);
 
-    // عدّاد المحاولات اليومية (بحد أقصى محاولتان — راجع canPlayRandomChallenge)
-    // يُصفَّر تلقائيًا مع أول محاولة في يوم جديد
-    const today = new Date().toISOString().slice(0, 10);
-    const dailyCount = profile.random_challenge_daily_date === today ? (profile.random_challenge_daily_count || 0) + 1 : 1;
-
+    // ملاحظة: عدّاد المحاولات اليومية لا يُلمس هنا إطلاقًا — يُستهلك فور
+    // دخول اللاعب للتحدي (راجع consumeRandomChallengeAttempt)، وليس فقط
+    // عند إكماله، حتى يُحتسب عليه دخوله ثم الخروج قبل اللعب الفعلي أيضًا
     const patch = {
       random_challenges_played: played,
       random_challenges_won: won,
       random_challenge_perfect_count: perfectCount,
-      random_challenge_daily_count: dailyCount,
-      random_challenge_daily_date: today,
     };
     if (result.score > (profile.random_challenge_best_score || 0)){
       patch.random_challenge_best_score = result.score;
@@ -918,7 +914,9 @@ const QV = (function(){
 
   /* ================= حد المحاولات اليومية للتحدي العشوائي (محاولتان كحد أقصى) =================
      يُفتح تلقائيًا من جديد مع أول محاولة في كل يوم ميلادي جديد — تمامًا كآلية
-     "محاولة جديدة كل يوم" المطبّقة على الاختبارات العادية (canPlay أعلاه). */
+     "محاولة جديدة كل يوم" المطبّقة على الاختبارات العادية (canPlay أعلاه).
+     الاستهلاك يحصل فور دخول اللاعب للتحدي (شاشة المعاينة)، وليس فقط عند
+     إكماله — فحتى الخروج قبل الضغط على "ابدأ التحدي" يُحتسب محاولة. */
   function canPlayRandomChallenge(profile){
     if (!profile) return true;
     const today = new Date().toISOString().slice(0, 10);
@@ -931,6 +929,17 @@ const QV = (function(){
     const today = new Date().toISOString().slice(0, 10);
     const used = profile.random_challenge_daily_date === today ? (profile.random_challenge_daily_count || 0) : 0;
     return Math.max(0, 2 - used);
+  }
+
+  async function consumeRandomChallengeAttempt(userId){
+    const profile = await getProfile(userId);
+    if (!profile) throw new Error("اللاعب غير موجود");
+    const today = new Date().toISOString().slice(0, 10);
+    const dailyCount = profile.random_challenge_daily_date === today ? (profile.random_challenge_daily_count || 0) + 1 : 1;
+    return updateProfile(userId, {
+      random_challenge_daily_count: dailyCount,
+      random_challenge_daily_date: today,
+    });
   }
 
   /* لوحة متصدرين منفصلة خاصة بوضع التحدي العشوائي فقط — مرتّبة حسب أفضل
@@ -1713,7 +1722,7 @@ const QV = (function(){
     getCustomCategories, addCategory, deleteCategory,
     getMaxTotalPlayers, saveMaxTotalPlayers,
     submitRandomChallengeResult, getRandomChallengeLeaderboard,
-    canPlayRandomChallenge, randomChallengeRemainingToday,
+    canPlayRandomChallenge, randomChallengeRemainingToday, consumeRandomChallengeAttempt,
 
     getMarathons, saveMarathon, deleteMarathon, getActiveMarathon, startMarathonNow,
     getMarathonPlayers, getMarathonPlayer, joinMarathon, allowMarathonReplay, resetMarathonAttempt,
