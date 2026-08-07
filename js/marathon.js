@@ -78,10 +78,13 @@ const Marathon = (function(){
     const alreadyBox = document.getElementById("marathon-already-joined");
     const p = AppState.profile;
     const existing = p ? await QV.getMarathonPlayer(m.id, p.id) : null;
+    const registrationOpen = m.registration_open !== false;
 
-    if (m.status !== "started"){
-      // زر الانضمام لا يظهر إطلاقًا قبل أن يضغط المشرف "ابدأ الآن" فعليًا —
-      // لا تسجيل مسبق ولا غرفة انتظار، فقط عدّ تنازلي إعلامي حتى موعد البدء
+    if (m.status !== "started" || !registrationOpen){
+      // زر الانضمام لا يظهر إطلاقًا قبل أن يضغط المشرف "ابدأ الآن" فعليًا،
+      // ولا يظهر أيضًا إن أغلق المشرف باب التسجيل يدويًا (حتى لو كان الحدث
+      // جاريًا بالفعل) — لا تسجيل مسبق ولا غرفة انتظار، فقط عدّ تنازلي
+      // إعلامي حتى موعد البدء
       joinBtn.hidden = true;
       alreadyBox.hidden = true;
     } else if (existing && !existing.replay_allowed){
@@ -93,9 +96,10 @@ const Marathon = (function(){
         <span>نقاط الماراثون: ${existing.marathon_score || 0}</span>
       `;
     } else {
-      // الحدث بدأ فعليًا — يظهر الزر الآن. المشرف "يقبل" انضمام أي لاعب في
-      // أي وقت أثناء الحدث؛ إن انضم مبكرًا (لا يزال ضمن نافذة السؤال الأول)
-      // يلعب فعليًا، وإلا يدخل مباشرة كمتفرّج فقط (راجع onClickJoin)
+      // الحدث بدأ فعليًا وباب التسجيل مفتوح — يظهر الزر الآن. المشرف "يقبل"
+      // انضمام أي لاعب في أي وقت أثناء الحدث؛ إن انضم مبكرًا (لا يزال ضمن
+      // نافذة السؤال الأول) يلعب فعليًا، وإلا يدخل مباشرة كمتفرّج فقط
+      // (راجع onClickJoin)
       joinBtn.hidden = false;
       alreadyBox.hidden = true;
     }
@@ -128,10 +132,14 @@ const Marathon = (function(){
     if (!activeMarathon || !AppState.profile) return;
     const p = AppState.profile;
 
-    // زر الانضمام لا يظهر أصلاً قبل بدء الحدث (راجع renderDashboardAnnouncement)،
-    // لكن هذا تحقّق دفاعي إضافي احتياطًا
+    // زر الانضمام لا يظهر أصلاً قبل بدء الحدث أو إن أغلق المشرف باب التسجيل
+    // (راجع renderDashboardAnnouncement)، لكن هذا تحقّق دفاعي إضافي احتياطًا
     if (activeMarathon.status !== "started"){
       showToast("لم يبدأ الماراثون بعد");
+      return;
+    }
+    if (activeMarathon.registration_open === false){
+      showToast("أغلق المشرف باب التسجيل لهذا الماراثون");
       return;
     }
 
