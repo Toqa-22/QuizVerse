@@ -1735,5 +1735,6 @@ const QV = (function(){
     getMarathons, saveMarathon, deleteMarathon, getActiveMarathon, startMarathonNow,
     getMarathonPlayers, getMarathonPlayer, joinMarathon, allowMarathonReplay, resetMarathonAttempt,
     recordMarathonAnswer, finishMarathonSurvivor, finalizeMarathon, getMarathonLeaderboard, subscribeToMarathon,
+    updateMarathonPlayer,
   };
 })();
