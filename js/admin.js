@@ -2,13 +2,13 @@
    لوحة تحكم المشرف: تسجيل الدخول، إدارة الأسئلة، إدارة
    الغرف الجماعية، وعرض الإحصائيات.
    ========================================================= */
+
 const Admin = (function(){
   let loggedIn = false;
   let currentAdminUsername = null;
   // currentRole: "admin" (المشرف الرئيسي، كل الصلاحيات) أو "subadmin" (صلاحيات محدودة:
   // إدارة الغرف الجماعية والأسئلة الخاصة بغرفه فقط — راجع "نظام المشرفين الفرعيين")
   let currentRole = "admin";
-   
   let currentSubAdminId = null;
   let selectedLoginRole = "admin";
 
@@ -1390,30 +1390,46 @@ const Admin = (function(){
     editingMarathons.forEach((m, i) => { m._playerCount = counts[i].length; });
 
     const tbody = document.getElementById("marathon-tbody");
-    tbody.innerHTML = editingMarathons.map(m => `
+    tbody.innerHTML = editingMarathons.map(m => {
+      const regOpen = m.registration_open !== false; // افتراضيًا مفتوح للماراثونات القديمة التي لا تملك هذا الحقل بعد
+      return `
       <tr>
         <td data-label="العنوان">${escapeHtml(m.title)}</td>
         <td data-label="الفئة">🎲 مزيج (سهل ← صعب)</td>
         <td data-label="الموعد">${escapeHtml(m.start_date)} — ${escapeHtml(m.start_time)}</td>
         <td data-label="الحالة"><span class="mp-status ${m.status === "finished" ? "finished" : m.status === "started" ? "started" : "waiting"}">${MARATHON_STATUS_LABEL[m.status] || m.status}</span></td>
+        <td data-label="التسجيل"><span class="mp-status ${regOpen ? "waiting" : "finished"}">${regOpen ? "🔓 مفتوح" : "🔒 مغلق"}</span></td>
         <td data-label="المنضمّون">👥 ${m._playerCount}</td>
         <td class="table-actions" data-label="">
           ${m.status === "draft" ? `<button data-publish-mar="${m.id}">📢 نشر</button>` : ""}
           ${m.status === "published" ? `<button data-start-mar="${m.id}">🏁 ابدأ الآن</button>` : ""}
           ${m.status === "started" ? `<button data-finish-mar="${m.id}">🏆 إنهاء الآن</button>` : ""}
+          <button data-toggle-reg="${m.id}" data-open="${regOpen ? "1" : "0"}">${regOpen ? "🔒 إغلاق التسجيل" : "🔓 فتح التسجيل"}</button>
           <button data-edit-mar="${m.id}">✏️ تعديل</button>
           <button data-players-mar="${m.id}" data-title="${escapeHtml(m.title)}">👥 اللاعبون</button>
           <button data-del-mar="${m.id}" class="danger">حذف</button>
         </td>
       </tr>
-    `).join("") || `<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">لا يوجد ماراثونات بعد</td></tr>`;
+    `;
+    }).join("") || `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">لا يوجد ماراثونات بعد</td></tr>`;
 
     tbody.querySelectorAll("[data-publish-mar]").forEach(b => b.addEventListener("click", () => onPublishMarathon(b.dataset.publishMar)));
     tbody.querySelectorAll("[data-start-mar]").forEach(b => b.addEventListener("click", () => onStartMarathon(b.dataset.startMar)));
     tbody.querySelectorAll("[data-finish-mar]").forEach(b => b.addEventListener("click", () => onFinishMarathon(b.dataset.finishMar)));
+    tbody.querySelectorAll("[data-toggle-reg]").forEach(b => b.addEventListener("click", () => onToggleMarathonRegistration(b.dataset.toggleReg, b.dataset.open === "1")));
     tbody.querySelectorAll("[data-edit-mar]").forEach(b => b.addEventListener("click", () => openMarathonModal(editingMarathons.find(x => x.id === b.dataset.editMar))));
     tbody.querySelectorAll("[data-players-mar]").forEach(b => b.addEventListener("click", () => openMarathonPlayersModal(b.dataset.playersMar, b.dataset.title)));
     tbody.querySelectorAll("[data-del-mar]").forEach(b => b.addEventListener("click", () => onDeleteMarathon(b.dataset.delMar)));
+  }
+
+  async function onToggleMarathonRegistration(id, currentlyOpen){
+    try{
+      await QV.saveMarathon({ id, registration_open: !currentlyOpen });
+      showToast(currentlyOpen ? "تم إغلاق باب التسجيل 🔒 — لن يظهر زر الانضمام للاعبين بعد الآن" : "تم فتح باب التسجيل 🔓 — يمكن للاعبين الانضمام الآن");
+      await renderMarathonTable();
+    }catch(err){
+      showToast(err.message || "تعذّر تحديث حالة التسجيل");
+    }
   }
 
   async function onPublishMarathon(id){
@@ -1451,15 +1467,6 @@ const Admin = (function(){
     }catch(err){ showToast("تعذّر حذف الماراثون"); console.error(err); }
   }
 
-  function isoToDatetimeLocal(iso){
-    if (!iso) return "";
-    try{
-      const d = new Date(iso);
-      const pad = n => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    }catch(e){ return ""; }
-  }
-
   function openMarathonModal(m){
     document.getElementById("form-marathon").reset();
     document.getElementById("maf-err").textContent = "";
@@ -1478,8 +1485,6 @@ const Admin = (function(){
       document.getElementById("maf-age-max").value = m.age_max != null ? m.age_max : 99;
       document.getElementById("maf-start-date").value = m.start_date || "";
       document.getElementById("maf-start-time").value = m.start_time || "";
-      document.getElementById("maf-reg-open").value = isoToDatetimeLocal(m.registration_open_at);
-      document.getElementById("maf-reg-close").value = isoToDatetimeLocal(m.registration_close_at);
       document.getElementById("maf-max-players").value = m.max_players || 100;
       document.getElementById("maf-question-count").value = m.question_count || 50;
 
@@ -1517,8 +1522,6 @@ const Admin = (function(){
     errEl.textContent = "";
 
     const timerMode = document.querySelector('input[name="maf-timer-mode"]:checked').value;
-    const regOpenRaw = document.getElementById("maf-reg-open").value;
-    const regCloseRaw = document.getElementById("maf-reg-close").value;
 
     const payload = {
       id: document.getElementById("maf-id").value || undefined,
@@ -1532,8 +1535,6 @@ const Admin = (function(){
       age_max: Number(document.getElementById("maf-age-max").value),
       start_date: document.getElementById("maf-start-date").value,
       start_time: document.getElementById("maf-start-time").value,
-      registration_open_at: regOpenRaw ? new Date(regOpenRaw).toISOString() : null,
-      registration_close_at: regCloseRaw ? new Date(regCloseRaw).toISOString() : null,
       max_players: Number(document.getElementById("maf-max-players").value),
       question_count: Number(document.getElementById("maf-question-count").value),
       use_age_based_timer: timerMode === "age_based",
@@ -1555,6 +1556,9 @@ const Admin = (function(){
       // الأصلي كما هو تمامًا (حتى لا يُفقد ربطه بالمشرف الفرعي الذي أنشأه
       // لو عدّله المشرف الرئيسي لاحقًا)
       payload.owner_username = currentRole === "subadmin" ? currentAdminUsername : null;
+      // باب الانضمام مفتوح افتراضيًا عند إنشاء أي ماراثون جديد — يتحكم به
+      // المشرف يدويًا لاحقًا من جدول الماراثونات (🔓 فتح / 🔒 إغلاق التسجيل)
+      payload.registration_open = true;
     }
 
     if (!payload.title){ errEl.textContent = "الرجاء كتابة عنوان الماراثون"; return; }
