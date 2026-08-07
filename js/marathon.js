@@ -9,7 +9,6 @@
    عدد "اللاعبين المتبقّين" وقوائم المتصدّرين الحيّة تُحدَّث عبر اشتراك
    Supabase Realtime على جدول marathon_players (بديل polling في وضع العرض
    التجريبي المحلي، تمامًا كآلية غرف اللعب الجماعي الحالية).
-   
    ========================================================= */
 
 const Marathon = (function(){
@@ -18,6 +17,7 @@ const Marathon = (function(){
   // بطاقة الإعلان على لوحة اللاعب
   let activeMarathon = null;
   let announceTimerHandle = null;
+  let announceCountdownHandle = null;
   let announceChannel = null;
 
   // الماراثون الذي انضم له اللاعب فعليًا (غرفة انتظار/لعب/مشاهدة)
@@ -67,13 +67,46 @@ const Marathon = (function(){
     if (!m){ card.hidden = true; return; }
     card.hidden = false;
 
+    await applyAnnounceState(m);
+
+    // كل تحديث لحظي على الماراثون (حالته، تفعيل/إغلاق التسجيل...) أو على
+    // عدد لاعبيه يُعيد تقييم كل شيء من جديد فورًا — وليس فقط عدد المنضمّين
+    // كما كان سابقًا. هذا ما يضمن ظهور زر "انضم" لحظة ضغط المشرف "ابدأ
+    // الآن" مباشرة، بدل أن يبقى مخفيًا حتى يُحدّث اللاعب الصفحة يدويًا
+    // (وبذلك يفوّت جزءًا من نافذة الانضمام العادلة للسؤال الأول)
+    announceChannel = QV.subscribeToMarathon(m.id, () => refreshAnnounceState());
+
+    // فحص احتياطي كل بضع ثوانٍ حتى لو تأخّر أو فشل وصول حدث Realtime لأي
+    // سبب (انقطاع اتصال مؤقت مثلاً) — يبقي حالة البطاقة صحيحة دائمًا
+    announceTimerHandle = setInterval(() => refreshAnnounceState(), 4000);
+    announceCountdownHandle = setInterval(() => updateAnnounceCountdown(activeMarathon), 1000);
+  }
+
+  async function refreshAnnounceState(){
+    if (!activeMarathon) return;
+    const marathons = await QV.getMarathons();
+    const fresh = marathons.find(x => x.id === activeMarathon.id);
+    if (!fresh){
+      // حُذف الماراثون أو لم يعد "نشطًا" (انتهى مثلاً) — نُعيد التحقق من
+      // وجود ماراثون نشط آخر بدل ترك البطاقة عالقة على بيانات قديمة
+      const stillActive = await QV.getActiveMarathon();
+      activeMarathon = stillActive;
+      const card = document.getElementById("marathon-announce-card");
+      if (!stillActive){ card.hidden = true; return; }
+      card.hidden = false;
+    } else {
+      activeMarathon = fresh;
+    }
+    await applyAnnounceState(activeMarathon);
+  }
+
+  async function applyAnnounceState(m){
     document.getElementById("marathon-announce-eyebrow").textContent = m.status === "started" ? "🏁 جارٍ الآن" : "🏁 ماراثون قادم";
     document.getElementById("marathon-announce-title").textContent = m.title;
     document.getElementById("marathon-announce-desc").textContent = m.description || "";
     document.getElementById("marathon-announce-date").textContent = formatMarathonDate(m.start_date, m.start_time);
 
     await refreshAnnouncePlayerCount(m.id);
-    announceChannel = QV.subscribeToMarathon(m.id, () => refreshAnnouncePlayerCount(m.id));
 
     const joinBtn = document.getElementById("btn-marathon-join");
     const alreadyBox = document.getElementById("marathon-already-joined");
@@ -106,7 +139,6 @@ const Marathon = (function(){
     }
 
     updateAnnounceCountdown(m);
-    announceTimerHandle = setInterval(() => updateAnnounceCountdown(m), 1000);
   }
 
   function updateAnnounceCountdown(m){
@@ -125,6 +157,7 @@ const Marathon = (function(){
 
   function stopAnnounceTimers(){
     clearInterval(announceTimerHandle); announceTimerHandle = null;
+    clearInterval(announceCountdownHandle); announceCountdownHandle = null;
     if (announceChannel){ QV.unsubscribe(announceChannel); announceChannel = null; }
   }
 
