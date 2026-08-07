@@ -9,7 +9,6 @@
    عدد "اللاعبين المتبقّين" وقوائم المتصدّرين الحيّة تُحدَّث عبر اشتراك
    Supabase Realtime على جدول marathon_players (بديل polling في وضع العرض
    التجريبي المحلي، تمامًا كآلية غرف اللعب الجماعي الحالية).
-   
    ========================================================= */
 
 const Marathon = (function(){
@@ -75,7 +74,7 @@ const Marathon = (function(){
     // كما كان سابقًا. هذا ما يضمن ظهور زر "انضم" لحظة ضغط المشرف "ابدأ
     // الآن" مباشرة، بدل أن يبقى مخفيًا حتى يُحدّث اللاعب الصفحة يدويًا
     // (وبذلك يفوّت جزءًا من نافذة الانضمام العادلة للسؤال الأول)
-    announceChannel = QV.subscribeToMarathon(m.id, () => refreshAnnounceState());
+    announceChannel = QV.subscribeToMarathon(m.id, () => refreshAnnounceState(), "announce");
 
     // فحص احتياطي كل بضع ثوانٍ حتى لو تأخّر أو فشل وصول حدث Realtime لأي
     // سبب (انقطاع اتصال مؤقت مثلاً) — يبقي حالة البطاقة صحيحة دائمًا
@@ -187,6 +186,11 @@ const Marathon = (function(){
     currentMarathon = activeMarathon;
     currentPlayerObj = { userId: p.id, name: p.username, avatar: p.avatar, age: p.age };
     QVSound.click();
+    // نوقف اشتراك بطاقة الإعلان على لوحة اللاعب الآن — لم نعد بحاجته أثناء
+    // اللعب أو المشاهدة، ويمنع إبقاءه أي استهلاك غير ضروري لاتصال الوقت
+    // الفعلي (كما كان سيسبب سابقًا خطأ "channel already subscribed" لو
+    // تصادم اسم القناة مع اشتراك اللعب — راجع subscribeToMarathon)
+    stopAnnounceTimers();
 
     // المشرف يقبل انضمام أي لاعب في أي وقت أثناء الحدث. إن كان لا يزال ضمن
     // نافذة السؤال الأول (عادل لكل اللاعبين)، ينضم فعليًا كمشارك يلعب. أما
@@ -218,7 +222,7 @@ const Marathon = (function(){
     guardedGoTo("screen-marathon-waiting");
     document.getElementById("mw-title").textContent = currentMarathon.title;
     await refreshWaitingCount();
-    waitingChannel = QV.subscribeToMarathon(currentMarathon.id, onWaitingRoomChange);
+    waitingChannel = QV.subscribeToMarathon(currentMarathon.id, onWaitingRoomChange, "waiting");
     updateWaitingCountdownText();
     waitingCountdownHandle = setInterval(updateWaitingCountdownText, 1000);
   }
@@ -285,7 +289,7 @@ const Marathon = (function(){
     tickMarathon();
     gameTimerHandle = setInterval(tickMarathon, 250);
 
-    gameplayChannel = QV.subscribeToMarathon(currentMarathon.id, refreshRemainingCount);
+    gameplayChannel = QV.subscribeToMarathon(currentMarathon.id, refreshRemainingCount, "play");
     refreshRemainingCount();
   }
 
@@ -695,7 +699,7 @@ const Marathon = (function(){
   async function enterSpectatorMode(){
     goTo("screen-marathon-spectator");
     await refreshSpectatorView();
-    spectatorChannel = QV.subscribeToMarathon(currentMarathon.id, refreshSpectatorView);
+    spectatorChannel = QV.subscribeToMarathon(currentMarathon.id, refreshSpectatorView, "spectate");
   }
 
   async function refreshSpectatorView(){
