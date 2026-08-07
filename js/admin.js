@@ -8,6 +8,7 @@ const Admin = (function(){
   // currentRole: "admin" (المشرف الرئيسي، كل الصلاحيات) أو "subadmin" (صلاحيات محدودة:
   // إدارة الغرف الجماعية والأسئلة الخاصة بغرفه فقط — راجع "نظام المشرفين الفرعيين")
   let currentRole = "admin";
+   
   let currentSubAdminId = null;
   let selectedLoginRole = "admin";
 
