@@ -337,6 +337,15 @@ async function renderDashboard(){
   // "🔒 حظر الاقتراحات") — لا يؤثر على أي صلاحية أخرى للاعب إطلاقًا
   document.getElementById("btn-dash-suggest").hidden = !!p.suggestions_locked;
 
+  // زر التحدي العشوائي: يعرض عدد المحاولات المتبقية اليوم (محاولتان كحد
+  // أقصى)، ويُعطَّل تلقائيًا بعد استنفادهما حتى يُفتحان من جديد غدًا
+  const rcBtn = document.getElementById("btn-dash-random-challenge");
+  if (rcBtn){
+    const remaining = QV.randomChallengeRemainingToday(p);
+    rcBtn.disabled = remaining <= 0;
+    rcBtn.textContent = remaining > 0 ? `🎲 تحدي عشوائي (${remaining} متبقٍ اليوم)` : "🎲 تحدي عشوائي (غدًا مجددًا)";
+  }
+
   document.getElementById("dash-stats").innerHTML = `
     <div class="stat-card"><strong>${p.total_score || 0}</strong><span>🏆 إجمالي النقاط</span></div>
     <div class="stat-card"><strong>${rank ? "#" + rank : "—"}</strong><span>🥇 الترتيب الحالي</span></div>
@@ -646,6 +655,12 @@ async function pickRandomChallenge(profile){
 async function startRandomChallengeFlow(){
   const p = AppState.profile;
   if (!p) return;
+
+  if (!QV.canPlayRandomChallenge(p)){
+    showToast("لقد استخدمت محاولتيك للتحدي العشوائي اليوم — ستُفتحان تلقائيًا غدًا 🎲");
+    return;
+  }
+
   guardedGoTo("screen-random-rolling");
   QVSound.click();
 
