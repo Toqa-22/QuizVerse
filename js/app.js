@@ -675,8 +675,16 @@ async function startRandomChallengeFlow(){
     showToast("لا توجد أسئلة كافية لبناء تحدٍ عشوائي لفئتك العمرية حاليًا");
     await renderDashboard();
     goTo("screen-dashboard");
-    return;
+    return; // لم تُحتسب أي محاولة هنا — التحدي لم يُبنَ أصلاً فلا تقصير من اللاعب
   }
+
+  // تُحتسب المحاولة الآن فور تأكيد إمكانية بدء التحدي (لا عند إكماله فقط) —
+  // حتى لو غادر اللاعب من شاشة المعاينة قبل الضغط على "ابدأ التحدي" فعليًا،
+  // تبقى هذه محاولة مُستهلكة من أصل محاولتيه اليوميتين (راجع أيضًا تحذير زر
+  // الرجوع في initRandomChallenge أدناه)
+  try{
+    AppState.profile = await QV.consumeRandomChallengeAttempt(p.id);
+  }catch(err){ console.warn("تعذّر تسجيل محاولة التحدي العشوائي", err); }
 
   currentRandomChallenge = picked;
   const diffLabel = { easy: "سهل", medium: "متوسط", hard: "صعب" }[picked.difficulty] || picked.difficulty;
@@ -689,6 +697,16 @@ async function startRandomChallengeFlow(){
 }
 
 function initRandomChallenge(){
+  document.getElementById("btn-random-preview-back").addEventListener("click", async () => {
+    const remaining = QV.randomChallengeRemainingToday(AppState.profile);
+    const confirmMsg = `تنبيه: الدخول لهذا التحدي احتُسب بالفعل كمحاولة من محاولتيك اليوميتين. إن غادرت الآن بلا لعب، ستبقى محتسبة ولن تسترجعها. لديك ${remaining} محاولة متبقية اليوم إن استمررت في المغادرة.\n\nهل تريد المغادرة فعلاً؟`;
+    if (confirm(confirmMsg)){
+      currentRandomChallenge = null;
+      await renderDashboard();
+      goTo("screen-dashboard");
+    }
+  });
+
   document.getElementById("btn-start-random-challenge").addEventListener("click", async () => {
     if (!currentRandomChallenge) return;
     const picked = currentRandomChallenge;
