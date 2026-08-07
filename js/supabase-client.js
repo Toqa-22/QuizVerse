@@ -5,6 +5,7 @@
    ولوحة المتصدرين — مع رجوع تلقائي لبيانات محلية (Demo Mode)
    عند عدم توفر إعدادات Supabase صحيحة.
    ========================================================= */
+
 const QV = (function(){
   let client = null;
   let demoMode = true;
@@ -1418,12 +1419,20 @@ const QV = (function(){
     return players.slice().sort((a, b) => (a.rank || 999) - (b.rank || 999) || (b.marathon_score || 0) - (a.marathon_score || 0));
   }
 
-  function subscribeToMarathon(marathonId, onChange){
+  /* purpose: مُعرّف فريد إضافي (announce/waiting/play/spectate...) حتى لا
+     يتصادم اسم القناة مع اشتراك آخر مفتوح بالفعل لنفس الماراثون في سياق
+     مختلف (مثلاً بطاقة الإعلان على لوحة اللاعب لا تزال مشتركة أثناء انضمامه
+     الفعلي للعب) — تصادم الاسم كان يسبب خطأ Supabase الشهير:
+     "cannot add postgres_changes callbacks ... after subscribe" ويمنع
+     اللاعب من الدخول فعليًا للماراثون */
+  let marathonChannelSeq = 0;
+  function subscribeToMarathon(marathonId, onChange, purpose){
     if (demoMode){
       const interval = setInterval(() => onChange({ polling: true }), 2000);
       return { unsubscribe: () => clearInterval(interval) };
     }
-    const channel = client.channel("marathon-" + marathonId)
+    const topic = `marathon-${purpose || "sub"}-${marathonId}-${++marathonChannelSeq}`;
+    const channel = client.channel(topic)
       .on("postgres_changes", { event: "*", schema: "public", table: "marathon_players", filter: `marathon_id=eq.${marathonId}` }, onChange)
       .on("postgres_changes", { event: "*", schema: "public", table: "marathons", filter: `id=eq.${marathonId}` }, onChange)
       .subscribe();
