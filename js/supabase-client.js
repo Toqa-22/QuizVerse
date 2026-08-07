@@ -5,6 +5,7 @@
    ولوحة المتصدرين — مع رجوع تلقائي لبيانات محلية (Demo Mode)
    عند عدم توفر إعدادات Supabase صحيحة.
    ========================================================= */
+
 const QV = (function(){
   let client = null;
   let demoMode = true;
@@ -100,6 +101,9 @@ const QV = (function(){
       // إحصائيات وضع "🎲 التحدي العشوائي" — منفصلة تمامًا عن إحصائيات اللاعب العامة
       random_challenges_played: 0, random_challenges_won: 0, random_challenge_perfect_count: 0,
       random_challenge_best_score: 0, random_challenge_best_category: null, random_challenge_best_avg_time: null,
+      // عدّاد يومي منفصل: يسمح بمحاولتين (2) للتحدي العشوائي كل يوم، ويُصفَّر
+      // تلقائيًا تمامًا كآلية "محاولة جديدة كل يوم" للاختبارات العادية
+      random_challenge_daily_count: 0, random_challenge_daily_date: null,
       recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
       created_at: new Date().toISOString(),
     };
@@ -158,10 +162,11 @@ const QV = (function(){
         const randomChallengeFields = [
           "random_challenges_played", "random_challenges_won", "random_challenge_perfect_count",
           "random_challenge_best_score", "random_challenge_best_category", "random_challenge_best_avg_time",
+          "random_challenge_daily_count", "random_challenge_daily_date",
         ];
         const isMissingRcColumn = randomChallengeFields.some(f => (insertErr.message || "").includes(f));
         if (isMissingRcColumn){
-          console.warn("أعمدة إحصائيات التحدي العشوائي غير موجودة بعد في قاعدة البيانات — نفّذ sql/migrate_random_challenge.sql. تم إنشاء الحساب بدونها مؤقتًا.", insertErr);
+          console.warn("أعمدة إحصائيات التحدي العشوائي غير موجودة بعد في قاعدة البيانات — نفّذ sql/migrate_random_challenge.sql و sql/migrate_random_challenge_daily_limit.sql. تم إنشاء الحساب بدونها مؤقتًا.", insertErr);
           const fallbackProfile = { ...profile };
           randomChallengeFields.forEach(f => delete fallbackProfile[f]);
           const { error: retryErr } = await client.from("profiles").insert(fallbackProfile);
@@ -891,10 +896,17 @@ const QV = (function(){
     const isPerfect = result.total > 0 && result.correctCount === result.total;
     const perfectCount = (profile.random_challenge_perfect_count || 0) + (isPerfect ? 1 : 0);
 
+    // عدّاد المحاولات اليومية (بحد أقصى محاولتان — راجع canPlayRandomChallenge)
+    // يُصفَّر تلقائيًا مع أول محاولة في يوم جديد
+    const today = new Date().toISOString().slice(0, 10);
+    const dailyCount = profile.random_challenge_daily_date === today ? (profile.random_challenge_daily_count || 0) + 1 : 1;
+
     const patch = {
       random_challenges_played: played,
       random_challenges_won: won,
       random_challenge_perfect_count: perfectCount,
+      random_challenge_daily_count: dailyCount,
+      random_challenge_daily_date: today,
     };
     if (result.score > (profile.random_challenge_best_score || 0)){
       patch.random_challenge_best_score = result.score;
@@ -902,6 +914,23 @@ const QV = (function(){
       patch.random_challenge_best_avg_time = result.avgTime != null ? result.avgTime : null;
     }
     return updateProfile(userId, patch);
+  }
+
+  /* ================= حد المحاولات اليومية للتحدي العشوائي (محاولتان كحد أقصى) =================
+     يُفتح تلقائيًا من جديد مع أول محاولة في كل يوم ميلادي جديد — تمامًا كآلية
+     "محاولة جديدة كل يوم" المطبّقة على الاختبارات العادية (canPlay أعلاه). */
+  function canPlayRandomChallenge(profile){
+    if (!profile) return true;
+    const today = new Date().toISOString().slice(0, 10);
+    if (profile.random_challenge_daily_date !== today) return true;
+    return (profile.random_challenge_daily_count || 0) < 2;
+  }
+
+  function randomChallengeRemainingToday(profile){
+    if (!profile) return 2;
+    const today = new Date().toISOString().slice(0, 10);
+    const used = profile.random_challenge_daily_date === today ? (profile.random_challenge_daily_count || 0) : 0;
+    return Math.max(0, 2 - used);
   }
 
   /* لوحة متصدرين منفصلة خاصة بوضع التحدي العشوائي فقط — مرتّبة حسب أفضل
@@ -1152,9 +1181,12 @@ const QV = (function(){
     const m = all.find(x => x.id === id);
     if (!m) throw new Error("الماراثون غير موجود");
 
+    // يدعم الماراثون الآن كل أنواع الأسئلة الأربعة (اختيار من متعدد، صح/خطأ،
+    // مطابقة، ترتيب) — كل نوع له مؤقته الخاص إن فعّل المشرف "⏱️ وقت مخصص"
     const pool = await getQuestions({ ageMin: m.age_min, ageMax: m.age_max });
-    const filtered = pool.filter(q => (q.type || "multiple_choice") === "multiple_choice" || q.type === "true_false");
-    if (!filtered.length) throw new Error("لا توجد أسئلة كافية (اختيار من متعدد/صح-خطأ) مطابقة للفئة العمرية المحددة");
+    const allowedMarathonTypes = ["multiple_choice", "true_false", "matching", "ordering"];
+    const filtered = pool.filter(q => allowedMarathonTypes.includes(q.type || "multiple_choice"));
+    if (!filtered.length) throw new Error("لا توجد أسئلة كافية مطابقة للفئة العمرية المحددة");
 
     const byDiff = { easy: [], medium: [], hard: [] };
     filtered.forEach(q => { (byDiff[q.difficulty] || byDiff.medium).push(q); });
@@ -1175,7 +1207,7 @@ const QV = (function(){
     }
     ordered = ordered.slice(0, m.question_count);
 
-    if (!ordered.length) throw new Error("لا توجد أسئلة كافية (اختيار من متعدد/صح-خطأ) مطابقة للفئة العمرية المحددة");
+    if (!ordered.length) throw new Error("لا توجد أسئلة كافية مطابقة للفئة العمرية المحددة");
     return saveMarathon({
       id, status: "started", actual_start_at: new Date().toISOString(), question_set: ordered,
       category: "mixed", difficulty: "mixed",
@@ -1681,6 +1713,7 @@ const QV = (function(){
     getCustomCategories, addCategory, deleteCategory,
     getMaxTotalPlayers, saveMaxTotalPlayers,
     submitRandomChallengeResult, getRandomChallengeLeaderboard,
+    canPlayRandomChallenge, randomChallengeRemainingToday,
 
     getMarathons, saveMarathon, deleteMarathon, getActiveMarathon, startMarathonNow,
     getMarathonPlayers, getMarathonPlayer, joinMarathon, allowMarathonReplay, resetMarathonAttempt,
