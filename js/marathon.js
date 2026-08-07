@@ -192,27 +192,16 @@ const Marathon = (function(){
     // تصادم اسم القناة مع اشتراك اللعب — راجع subscribeToMarathon)
     stopAnnounceTimers();
 
-    // المشرف يقبل انضمام أي لاعب في أي وقت أثناء الحدث. إن كان لا يزال ضمن
-    // نافذة السؤال الأول (عادل لكل اللاعبين)، ينضم فعليًا كمشارك يلعب. أما
-    // إن تأخّر عن ذلك، فلا يمكنه اللعب فعليًا (سيكون قد فاته إجابة أسئلة لم
-    // يرها) — يدخل مباشرة كمتفرّج فقط دون تسجيل أي محاولة لعب له
+    // أي لاعب ينضم في أي وقت أثناء الحدث يلعب فعليًا (وليس مجرد مشاهدة) —
+    // الشرط الوحيد لإتاحة الانضمام هو أن يكون الماراثون قد بدأ فعلاً وأن
+    // يكون المشرف لم يُغلق باب التسجيل يدويًا (تحقّقان أعلاه). لا يوجد أي
+    // قيد زمني إضافي على "نافذة السؤال الأول" بعد الآن — إن انضم لاعب
+    // متأخرًا، يدخل مباشرة على أي سؤال يعرضه الجدول الزمني الحالي لحظتها
+    // ويكمل من هناك، تمامًا كأي لاعب آخر منضمّ.
     try{
-      const timePerQ = currentMarathon.use_age_based_timer
-        ? await QV.resolveQuestionTimer({ age: ageGroupToRange(p.age).min, category: currentMarathon.category })
-        : (currentMarathon.time_per_question || 15);
-      const elapsed = currentMarathon.actual_start_at
-        ? (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000
-        : Infinity;
-      const stillFairToJoin = elapsed < timePerQ;
-
-      if (stillFairToJoin){
-        currentPlayerRow = await QV.joinMarathon(currentMarathon.id, currentPlayerObj);
-        showToast("🏁 انضممت للماراثون! بالتوفيق 🍀");
-        await startGameplayLoop(true);
-      } else {
-        showToast("بدأ الماراثون بالفعل — يمكنك مشاهدته مباشرةً فقط الآن، دون احتساب محاولة لعب لك");
-        await enterSpectatorMode();
-      }
+      currentPlayerRow = await QV.joinMarathon(currentMarathon.id, currentPlayerObj);
+      showToast("🏁 انضممت للماراثون! بالتوفيق 🍀");
+      await startGameplayLoop(true);
     }catch(err){
       showToast(err.message || "تعذّر الانضمام للماراثون");
     }
@@ -329,6 +318,20 @@ const Marathon = (function(){
     }
 
     if (idx >= mySchedule.length){
+      if (currentQuestionIndex === -1){
+        // انضم بعد أن استُنفدت كل الأسئلة فعليًا (لم يُجب على أي سؤال إطلاقًا) —
+        // لا يستحق نتيجة "صمد حتى النهاية"؛ نُصحّح حالته في السجل حتى لا
+        // يُصنَّف عند حسم الترتيب النهائي كـ"ناجٍ" رغم عدم لعبه شيئًا، وننقله
+        // مباشرة لوضع المشاهدة بدل منحه فوزًا لم يلعبه
+        clearInterval(gameTimerHandle); gameTimerHandle = null;
+        if (gameplayChannel){ QV.unsubscribe(gameplayChannel); gameplayChannel = null; }
+        if (currentPlayerRow && currentPlayerRow.id){
+          try{ await QV.updateMarathonPlayer(currentPlayerRow.id, { status: "spectating" }); }catch(e){ /* ignore */ }
+        }
+        showToast("انتهت أسئلة الماراثون بالفعل — يمكنك مشاهدة النتائج الحية فقط الآن");
+        await enterSpectatorMode();
+        return;
+      }
       await survivedWholePool();
       return;
     }
