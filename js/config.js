@@ -4,7 +4,6 @@
    إذا تُركت القيم الافتراضية، يعمل التطبيق تلقائيًا في
    "وضع تجريبي محلي" (Demo Mode) بأسئلة وبيانات نموذجية
    دون الحاجة لأي اتصال بالإنترنت.
-   
    ========================================================= */
 
 const QUIZVERSE_CONFIG = {
@@ -42,4 +41,20 @@ const QUIZVERSE_ACHIEVEMENTS = [
   { id: "mar_survivor", name: "الناجي",          icon: "🔥", desc: "اصمد 25 سؤالاً متتاليًا في ماراثون واحد", check: (p) => (p.marathon_highest_streak || 0) >= 25 },
   { id: "mar_champion", name: "بطل الماراثون",    icon: "👑", desc: "اربح المركز الأول في ماراثون",     check: (p) => (p.marathon_best_rank || 0) === 1 },
   { id: "mar_legend",  name: "أسطورة الماراثون", icon: "🏆", desc: "اربح 10 ماراثونات",                check: (p) => (p.marathon_wins || 0) >= 10 },
+];
+
+/* =========================================================
+   📚 إنجازات القراءة — مستقلة تمامًا عن QUIZVERSE_ACHIEVEMENTS، ولا تمنح أي
+   نقاط أو مكافآت إطلاقًا؛ مجرّد شارات تقديرية لمتابعة عادة القراءة نفسها.
+   ========================================================= */
+const READING_ACHIEVEMENTS = [
+  { id: "read_first",    name: "أول جلسة قراءة",  icon: "📖", desc: "أكمل أول جلسة قراءة لك (5 فقرات)",         check: (p) => (p.reading_total_completed || 0) >= 5 },
+  { id: "read_10",       name: "بداية جميلة",      icon: "🌱", desc: "أكمل قراءة 10 فقرات",                      check: (p) => (p.reading_total_completed || 0) >= 10 },
+  { id: "read_50",       name: "50 فقرة",          icon: "📚", desc: "أكمل قراءة 50 فقرة",                       check: (p) => (p.reading_total_completed || 0) >= 50 },
+  { id: "read_100",      name: "100 فقرة",         icon: "🧠", desc: "أكمل قراءة 100 فقرة",                      check: (p) => (p.reading_total_completed || 0) >= 100 },
+  { id: "read_200",      name: "Reading Master",   icon: "👑", desc: "أكمل قراءة 200 فقرة",                      check: (p) => (p.reading_total_completed || 0) >= 200 },
+  { id: "read_streak3",  name: "استمرارية",        icon: "⚡", desc: "اقرأ 3 أيام متتالية",                      check: (p) => (p.reading_streak_best || 0) >= 3 },
+  { id: "read_streak7",  name: "أسبوع كامل",       icon: "🔥", desc: "اقرأ 7 أيام متتالية",                      check: (p) => (p.reading_streak_best || 0) >= 7 },
+  { id: "read_streak14", name: "مثابر",            icon: "💪", desc: "اقرأ 14 يومًا متتاليًا",                   check: (p) => (p.reading_streak_best || 0) >= 14 },
+  { id: "read_30days",   name: "30 يوم قراءة",     icon: "🌟", desc: "اقرأ في 30 يومًا مختلفًا (ليست بالضرورة متتالية)", check: (p) => (p.reading_dates || []).length >= 30 },
 ];
