@@ -35,6 +35,11 @@ const Marathon = (function(){
   let currentQuestionIndex = -1;
   let answeredCurrentQuestion = true;
   let resolvedTimePerQuestion = 15;
+  let myJoinedAt = null;       // اللحظة الفعلية (بتوقيت هذا اللاعب) التي بدأ فيها لعبه —
+                                // أساس جدوله الزمني الخاص، بدل الاعتماد على وقت بدء
+                                // الماراثون العام. هذا يضمن حصول كل لاعب (مبكرًا انضمّ أو
+                                // متأخرًا) على المدة الكاملة لأول سؤال يراه دائمًا، بدل أن
+                                // يظهر له وقت متبقٍ قليل لأن سؤالًا كان يجري بالفعل قبل انضمامه
   let myQuestionOrder = [];   // نسخة مُبعثرة خاصة بهذا اللاعب من مجموعة الأسئلة الثابتة —
                                // نفس الأسئلة لكل اللاعبين، لكن كل لاعب يراها بترتيب مختلف
   let mySchedule = [];        // جدول زمني تراكمي خاص بهذا اللاعب (مدة كل سؤال قد تختلف حسب نوعه)
@@ -260,6 +265,10 @@ const Marathon = (function(){
   async function startGameplayLoop(skipIntro){
     clearInterval(gameTimerHandle);
     if (skipIntro) goTo("screen-marathon-quiz");
+    // نُثبّت لحظة انطلاق اللعب الفعلية لهذا اللاعب الآن — الجدول الزمني
+    // بأكمله (بما فيها السؤال الأول) يُحسب اعتبارًا منها، وليس من لحظة بدء
+    // الماراثون العامة، حتى لا يخسر أي لاعب متأخر جزءًا من وقت أول سؤال يراه
+    myJoinedAt = Date.now();
     resolvedTimePerQuestion = currentMarathon.use_age_based_timer
       ? await QV.resolveQuestionTimer({ age: ageGroupToRange(currentPlayerObj.age).min, category: currentMarathon.category })
       : (currentMarathon.time_per_question || 15);
@@ -301,8 +310,8 @@ const Marathon = (function(){
   }
 
   async function tickMarathon(){
-    if (!currentMarathon || !currentMarathon.actual_start_at) return;
-    const elapsed = (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000;
+    if (!currentMarathon || !myJoinedAt) return;
+    const elapsed = (Date.now() - myJoinedAt) / 1000;
     let idx = mySchedule.findIndex(entry => elapsed < entry.endsAt);
     if (idx === -1) idx = mySchedule.length;
 
@@ -643,7 +652,7 @@ const Marathon = (function(){
       if (navigator.vibrate) navigator.vibrate(180);
     }
 
-    const survivedSeconds = (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000;
+    const survivedSeconds = (Date.now() - myJoinedAt) / 1000;
     currentPlayerRow = await QV.recordMarathonAnswer(currentMarathon.id, currentPlayerObj.userId, { correct: isCorrect, survivedSeconds });
     const streakEl = document.getElementById("mq-streak");
     if (streakEl) streakEl.textContent = (currentPlayerRow && currentPlayerRow.current_streak) || 0;
@@ -658,7 +667,7 @@ const Marathon = (function(){
     if (gameplayChannel){ QV.unsubscribe(gameplayChannel); gameplayChannel = null; }
 
     if (!alreadyRecorded){
-      const survivedSeconds = (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000;
+      const survivedSeconds = (Date.now() - myJoinedAt) / 1000;
       currentPlayerRow = await QV.recordMarathonAnswer(currentMarathon.id, currentPlayerObj.userId, { correct: false, survivedSeconds });
       QVSound.eliminated();
     } else {
@@ -674,7 +683,7 @@ const Marathon = (function(){
   async function survivedWholePool(){
     clearInterval(gameTimerHandle); gameTimerHandle = null;
     if (gameplayChannel){ QV.unsubscribe(gameplayChannel); gameplayChannel = null; }
-    const survivedSeconds = (Date.now() - new Date(currentMarathon.actual_start_at).getTime()) / 1000;
+    const survivedSeconds = (Date.now() - myJoinedAt) / 1000;
     currentPlayerRow = await QV.finishMarathonSurvivor(currentMarathon.id, currentPlayerObj.userId, survivedSeconds);
     QVSound.win();
     showToast("🏁 صمدت حتى نهاية كل الأسئلة! بانتظار إعلان النتائج النهائية من المشرف");
