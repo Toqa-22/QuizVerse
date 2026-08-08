@@ -66,6 +66,10 @@ const QVSound = (function(){
     speedBonus(){ tone(880,0.08,"triangle",0.14,0); tone(1175,0.14,"triangle",0.14,0.05); },
     eliminated(){ tone(400,0.12,"sawtooth",0.14,0); tone(260,0.16,"sawtooth",0.13,0.1); tone(140,0.32,"sawtooth",0.12,0.24); },
 
+    // ---------------- 📚 نظام القراءة (أصوات خفيفة وغير مزعجة) ----------------
+    readingNext(){ tone(660,0.05,"sine",0.08,0); },
+    readingComplete(){ tone(587,0.1,"sine",0.13,0); tone(784,0.16,"sine",0.13,0.09); },
+
     // ---------------- إعدادات الصوت ----------------
     getSettings(){ return { ...settings }; },
     setSfxEnabled(v){ settings.sfxEnabled = !!v; persist(); },
