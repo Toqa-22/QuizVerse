@@ -15,7 +15,7 @@ const Admin = (function(){
   // اللوحات المتاحة للمشرف الرئيسي فقط — يُمنع المشرف الفرعي من الوصول إليها
   // حتى لو حاول تفعيلها يدويًا (حماية إضافية من جهة الواجهة، إلى جانب إخفاء
   // أزرارها بالكامل من القائمة الجانبية)
-  const ADMIN_ONLY_PANELS = new Set(["panel-stats", "panel-settings", "panel-age-timers", "panel-players", "panel-subadmins", "panel-activity", "panel-suggestions", "panel-marathon"]);
+  const ADMIN_ONLY_PANELS = new Set(["panel-stats", "panel-settings", "panel-age-timers", "panel-players", "panel-subadmins", "panel-activity", "panel-suggestions", "panel-marathon", "panel-reading"]);
   // لوحة خاصة بالمشرف الفرعي فقط — لا تظهر إطلاقًا للمشرف الرئيسي (الذي يملك
   // أصلاً لوحة "👤 اللاعبون" الشاملة الأكثر تفصيلاً)
   const SUBADMIN_ONLY_PANELS = new Set(["panel-subadmin-stats"]);
@@ -87,6 +87,10 @@ const Admin = (function(){
         document.getElementById("maf-time-group").hidden = radio.value === "age_based";
       });
     });
+
+    document.getElementById("btn-new-passage").addEventListener("click", () => openPassageModal());
+    document.getElementById("form-passage").addEventListener("submit", onSavePassage);
+    document.getElementById("btn-cancel-passage").addEventListener("click", () => closeModal("modal-passage"));
 
     populateCategorySelects();
   }
@@ -200,6 +204,7 @@ const Admin = (function(){
     if (id === "panel-suggestions") renderSuggestionsTable();
     if (id === "panel-subadmin-stats") renderSubAdminStatsTable();
     if (id === "panel-marathon") renderMarathonTable();
+    if (id === "panel-reading") renderReadingTable();
   }
 
   /* ---------------- stats ---------------- */
@@ -829,6 +834,14 @@ const Admin = (function(){
             </button>
           </div>
         </td>
+        <td data-label="📚 القراءة">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="mp-status ${p.reading_allowed ? "waiting" : "finished"}">${p.reading_allowed ? "🔓 مسموح" : "🔒 غير مسموح"}</span>
+            <button type="button" data-toggle-reading="${p.id}" data-allowed="${p.reading_allowed ? "1" : "0"}" class="${p.reading_allowed ? "danger" : ""}">
+              ${p.reading_allowed ? "إلغاء السماح" : "سماح بالقراءة"}
+            </button>
+          </div>
+        </td>
         <td data-label="منح محاولة إضافية">
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <select data-grant-cat="${p.id}">${catOptions}</select>
@@ -842,7 +855,7 @@ const Admin = (function(){
         </td>
       </tr>
     `;
-    }).join("") : `<tr><td colspan="10" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون مسجّلون بعد</td></tr>`;
+    }).join("") : `<tr><td colspan="11" class="muted" style="text-align:center;padding:24px">لا يوجد لاعبون مسجّلون بعد</td></tr>`;
 
     tbody.querySelectorAll("[data-toggle-suggest-lock]").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -854,6 +867,21 @@ const Admin = (function(){
           await renderPlayersTable();
         }catch(err){
           showToast(err.message || "تعذّر تحديث الحالة — تأكد من تنفيذ ملف sql/migrate_suggestions_locked.sql على قاعدة بياناتك");
+          console.error(err);
+        }
+      });
+    });
+
+    tbody.querySelectorAll("[data-toggle-reading]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.toggleReading;
+        const currentlyAllowed = btn.dataset.allowed === "1";
+        try{
+          await QV.setPlayerReadingAllowed(id, !currentlyAllowed);
+          showToast(currentlyAllowed ? "تم إلغاء صلاحية القراءة لهذا اللاعب" : "تم منح اللاعب صلاحية القراءة ✔");
+          await renderPlayersTable();
+        }catch(err){
+          showToast(err.message || "تعذّر تحديث صلاحية القراءة — تأكد من تنفيذ sql/migrate_reading_system.sql");
           console.error(err);
         }
       });
@@ -1617,6 +1645,78 @@ const Admin = (function(){
         await renderMarathonPlayersTable(marathonId);
       }catch(err){ showToast(err.message || "تعذّر التنفيذ"); }
     }));
+  }
+
+  /* ---------------- 📚 reading management (main admin only) ---------------- */
+  let editingPassages = [];
+
+  async function renderReadingTable(){
+    editingPassages = await QV.getAllReadingPassagesAdmin();
+    const tbody = document.getElementById("reading-tbody");
+    tbody.innerHTML = editingPassages.length ? editingPassages.map(p => `
+      <tr>
+        <td data-label="#">${p.order_index}</td>
+        <td data-label="العنوان">${escapeHtml(p.title || "—")}</td>
+        <td class="q-cell" data-label="مقتطف">${escapeHtml((p.content || "").slice(0, 80))}${(p.content || "").length > 80 ? "…" : ""}</td>
+        <td data-label="نشطة"><span class="mp-status ${p.active !== false ? "waiting" : "finished"}">${p.active !== false ? "نشطة" : "متوقفة"}</span></td>
+        <td class="table-actions" data-label="">
+          <button data-edit-passage="${p.id}">تعديل</button>
+          <button data-del-passage="${p.id}" class="danger">حذف</button>
+        </td>
+      </tr>
+    `).join("") : `<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">لا توجد فقرات بعد</td></tr>`;
+
+    tbody.querySelectorAll("[data-edit-passage]").forEach(b => b.addEventListener("click", () => openPassageModal(editingPassages.find(p => p.id === b.dataset.editPassage))));
+    tbody.querySelectorAll("[data-del-passage]").forEach(b => b.addEventListener("click", () => onDeletePassage(b.dataset.delPassage)));
+  }
+
+  function openPassageModal(p){
+    document.getElementById("form-passage").reset();
+    document.getElementById("passage-modal-title").textContent = p ? "✏️ تعديل الفقرة" : "📚 فقرة جديدة";
+    document.getElementById("paf-id").value = p ? p.id : "";
+    document.getElementById("paf-order").value = p ? p.order_index : (editingPassages.length ? Math.max(...editingPassages.map(x => x.order_index || 0)) + 1 : 1);
+    document.getElementById("paf-title").value = p ? (p.title || "") : "";
+    document.getElementById("paf-content").value = p ? p.content : "";
+    document.getElementById("paf-active").checked = p ? p.active !== false : true;
+    document.getElementById("paf-err").textContent = "";
+    openModal("modal-passage");
+  }
+
+  async function onSavePassage(e){
+    e.preventDefault();
+    const errEl = document.getElementById("paf-err");
+    errEl.textContent = "";
+
+    const payload = {
+      id: document.getElementById("paf-id").value || undefined,
+      order_index: Number(document.getElementById("paf-order").value),
+      title: document.getElementById("paf-title").value.trim(),
+      content: document.getElementById("paf-content").value.trim(),
+      active: document.getElementById("paf-active").checked,
+    };
+    if (!payload.content){ errEl.textContent = "الرجاء كتابة نص الفقرة"; return; }
+    if (!payload.order_index || payload.order_index < 1){ errEl.textContent = "الرجاء تحديد ترتيب صحيح للفقرة"; return; }
+
+    try{
+      await QV.saveReadingPassage(payload);
+      closeModal("modal-passage");
+      showToast("تم حفظ الفقرة بنجاح ✔");
+      await renderReadingTable();
+    }catch(err){
+      errEl.textContent = err.message || "تعذّر حفظ الفقرة";
+    }
+  }
+
+  async function onDeletePassage(id){
+    if (!confirm("هل تريد حذف هذه الفقرة نهائيًا؟")) return;
+    try{
+      await QV.deleteReadingPassage(id);
+      showToast("تم حذف الفقرة");
+      await renderReadingTable();
+    }catch(err){
+      showToast("تعذّر حذف الفقرة");
+      console.error(err);
+    }
   }
 
   function escapeHtml(str){
