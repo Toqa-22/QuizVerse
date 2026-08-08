@@ -44,6 +44,7 @@
     <button class="icon-btn" id="btn-header-leaderboard" title="لوحة المتصدرين" aria-label="لوحة المتصدرين">🏆</button>
     <button class="icon-btn" id="btn-header-random-leaderboard" title="لوحة التحدي العشوائي" aria-label="لوحة التحدي العشوائي">🎲</button>
     <button class="icon-btn" id="btn-header-marathon-leaderboard" title="لوحة الماراثون" aria-label="لوحة الماراثون">🏁</button>
+    <button class="icon-btn" id="btn-header-reading-leaderboard" title="لوحة القراءة" aria-label="لوحة القراءة">📚</button>
   </div>
 </header>
 
@@ -161,6 +162,7 @@
         <button class="btn btn-random-challenge" id="btn-dash-random-challenge">🎲 تحدي عشوائي</button>
         <button class="btn btn-ghost" id="btn-dash-profile">👤 ملفي الشخصي</button>
         <button class="btn btn-ghost" id="btn-dash-suggest">💡 اقترح سؤالاً</button>
+        <button class="btn btn-reading" id="btn-dash-reading" hidden>📚 القراءة</button>
       </div>
     </div>
 
@@ -681,6 +683,53 @@
     </div>
   </section>
 
+  <!-- ============ 📚 READING: SESSION ============ -->
+  <section class="screen screen--reading" id="screen-reading">
+    <div class="screen-head" style="max-width:640px;margin-inline:auto">
+      <button class="btn-back" id="btn-reading-exit">→ رجوع للوحتي</button>
+      <p class="eyebrow">📚 جلسة قراءة</p>
+      <h2>فقرة <span class="accent" id="reading-counter">1 / 5</span></h2>
+    </div>
+
+    <div class="reading-progress-track">
+      <div class="reading-progress-fill" id="reading-progress-fill"></div>
+    </div>
+
+    <div class="glass-card reading-card" id="reading-card" style="max-width:640px;margin-inline:auto">
+      <h3 id="reading-title"></h3>
+      <div class="reading-content" id="reading-content"><!-- injected --></div>
+    </div>
+
+    <div class="reading-actions" style="max-width:640px;margin-inline:auto">
+      <button type="button" class="btn btn-reading btn-block" id="btn-reading-next">التالي ←</button>
+    </div>
+  </section>
+
+  <!-- ============ 📚 READING: SUCCESS ============ -->
+  <section class="screen screen--reading-success" id="screen-reading-success">
+    <div class="reading-success-wrap">
+      <div class="reading-success-emoji">📚✨</div>
+      <h2>أحسنت!</h2>
+      <p class="muted">أكملت قراءة 5 فقرات جديدة</p>
+      <div class="reading-success-stats">
+        <div><strong id="reading-success-total">0</strong><span>إجمالي الفقرات المقروءة</span></div>
+      </div>
+      <button type="button" class="btn btn-primary" id="btn-reading-success-done">لوحتي الرئيسية</button>
+    </div>
+  </section>
+
+  <!-- ============ 📚 READING: RANKING ============ -->
+  <section class="screen screen--reading-leaderboard" id="screen-reading-leaderboard">
+    <div class="screen-head">
+      <button class="btn-back" data-back="screen-dashboard">→ رجوع</button>
+      <h2>📚 أكثر <span class="accent">اللاعبين قراءة</span></h2>
+      <p class="muted">الترتيب حسب إجمالي الفقرات المكتملة — لا علاقة له بنتائج الاختبارات</p>
+    </div>
+    <div class="glass-card lb-card">
+      <ol class="lb-list" id="rdlb-list"><!-- injected --></ol>
+    </div>
+  </section>
+
   <!-- ============ ADMIN LOGIN ============ -->
   <section class="screen screen--admin-login" id="screen-admin-login">
     <div class="screen-head" style="max-width:420px;margin-inline:auto">
@@ -722,6 +771,7 @@
         <button class="admin-nav-btn" data-panel="panel-players" data-role="admin">👤 اللاعبون</button>
         <button class="admin-nav-btn" data-panel="panel-games">🎮 الغرف الجماعية</button>
         <button class="admin-nav-btn" data-panel="panel-marathon" data-role="admin">🏁 إدارة الماراثون</button>
+        <button class="admin-nav-btn" data-panel="panel-reading" data-role="admin">📚 إدارة القراءة</button>
         <button class="admin-nav-btn" data-panel="panel-subadmin-stats" data-role="subadmin">📊 إحصائيات اللاعبين</button>
         <button class="admin-nav-btn" data-panel="panel-suggestions" data-role="admin">📮 اقتراحات اللاعبين <span class="nav-badge" id="suggestions-badge" hidden>0</span></button>
         <button class="admin-nav-btn" data-panel="panel-subadmins" data-role="admin">🧩 المشرفون الفرعيون</button>
@@ -891,7 +941,7 @@
           <p class="muted">كل لاعب يستطيع لعب كل فئة/مستوى مرة واحدة تلقائيًا كل يوم (تُفتح من جديد تلقائيًا مع بداية كل يوم). لمنح محاولة إضافية إن أراد إعادة نفس الفئة والمستوى في نفس اليوم، اختر اللاعب أدناه.</p>
           <div class="table-wrap">
             <table class="admin-table" id="players-table">
-              <thead><tr><th>اللاعب</th><th>الأسئلة المحلولة</th><th>إجابات صحيحة</th><th>إجابات خاطئة</th><th>الأداء</th><th>نسبة الصحة</th><th>النقاط</th><th>الاختبارات</th><th>اقتراحات الأسئلة</th><th>منح محاولة إضافية</th></tr></thead>
+              <thead><tr><th>اللاعب</th><th>الأسئلة المحلولة</th><th>إجابات صحيحة</th><th>إجابات خاطئة</th><th>الأداء</th><th>نسبة الصحة</th><th>النقاط</th><th>الاختبارات</th><th>اقتراحات الأسئلة</th><th>📚 القراءة</th><th>منح محاولة إضافية</th></tr></thead>
               <tbody id="players-tbody"></tbody>
             </table>
           </div>
@@ -924,6 +974,21 @@
             <table class="admin-table" id="marathon-table">
               <thead><tr><th>العنوان</th><th>الفئة</th><th>الموعد</th><th>الحالة</th><th>التسجيل</th><th>المنضمّون</th><th></th></tr></thead>
               <tbody id="marathon-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 📚 Reading Management (main admin only) -->
+        <div class="admin-panel" id="panel-reading" data-role="admin">
+          <div class="admin-panel-head">
+            <h2>📚 إدارة القراءة</h2>
+            <button class="btn btn-primary" id="btn-new-passage">+ فقرة جديدة</button>
+          </div>
+          <p class="muted">مرحلة مستقلة تمامًا عن الاختبارات — بلا مؤقت وبلا أسئلة بعدها. اللاعبون المسموح لهم (راجع "👤 اللاعبون") يحصلون على 5 فقرات بالترتيب في كل جلسة، بلا أي تكرار قبل إكمال جميع الفقرات.</p>
+          <div class="table-wrap">
+            <table class="admin-table" id="reading-table">
+              <thead><tr><th>#</th><th>العنوان</th><th>مقتطف</th><th>نشطة</th><th></th></tr></thead>
+              <tbody id="reading-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -1263,6 +1328,28 @@
   </div>
 </div>
 
+<!-- ============ MODAL: READING PASSAGE EDITOR ============ -->
+<div class="modal-overlay" id="modal-passage" hidden>
+  <form class="glass-card modal-card" id="form-passage">
+    <h3 id="passage-modal-title">📚 فقرة جديدة</h3>
+    <input type="hidden" id="paf-id">
+    <div class="field-grid">
+      <div class="field"><label>ترتيب الفقرة</label><input type="number" id="paf-order" min="1" required></div>
+      <div class="field"><label>العنوان (اختياري)</label><input type="text" id="paf-title"></div>
+    </div>
+    <div class="field"><label>نص الفقرة</label><textarea id="paf-content" rows="8" required></textarea></div>
+    <div class="toggle-row">
+      <label class="toggle-switch"><input type="checkbox" id="paf-active" checked><span class="toggle-slider"></span></label>
+      <div><strong>نشطة</strong><p class="muted">الفقرات غير النشطة لا تظهر ضمن جلسات القراءة.</p></div>
+    </div>
+    <span class="field-error" id="paf-err"></span>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btn-cancel-passage">إلغاء</button>
+      <button type="submit" class="btn btn-primary">حفظ</button>
+    </div>
+  </form>
+</div>
+
 <!-- ============ MODAL: SUB ADMIN EDITOR ============ -->
 <div class="modal-overlay" id="modal-subadmin" hidden>
   <form class="glass-card modal-card" id="form-subadmin">
@@ -1293,6 +1380,7 @@
 <script src="js/leaderboard.js" defer></script>
 <script src="js/multiplayer.js" defer></script>
 <script src="js/marathon.js" defer></script>
+<script src="js/reading.js" defer></script>
 <script src="js/admin.js" defer></script>
 <script src="js/app.js" defer></script>
 </body>
