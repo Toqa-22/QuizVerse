@@ -29,6 +29,7 @@ const PLAYER_ONLY_SCREENS = new Set([
   "screen-suggest-question", "screen-random-rolling", "screen-random-preview", "screen-random-leaderboard",
   "screen-marathon-waiting", "screen-marathon-quiz", "screen-marathon-eliminated", "screen-marathon-spectator",
   "screen-marathon-results", "screen-marathon-leaderboard",
+  "screen-reading", "screen-reading-success", "screen-reading-leaderboard",
 ]);
 
 function guardedGoTo(screenId){
@@ -345,6 +346,8 @@ async function renderDashboard(){
     rcBtn.disabled = remaining <= 0;
     rcBtn.textContent = remaining > 0 ? `🎲 تحدي عشوائي (${remaining} متبقٍ اليوم)` : "🎲 تحدي عشوائي (غدًا مجددًا)";
   }
+
+  Reading.applyDashboardVisibility(p);
 
   document.getElementById("dash-stats").innerHTML = `
     <div class="stat-card"><strong>${p.total_score || 0}</strong><span>🏆 إجمالي النقاط</span></div>
@@ -863,6 +866,10 @@ function initHeader(){
     guardedGoTo("screen-marathon-leaderboard");
     await Marathon.renderLeaderboard();
   });
+  document.getElementById("btn-header-reading-leaderboard").addEventListener("click", async () => {
+    guardedGoTo("screen-reading-leaderboard");
+    await Reading.renderLeaderboard();
+  });
 }
 
 /* ---------------- back buttons ---------------- */
@@ -1055,6 +1062,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   Leaderboard.init();
   Admin.init();
   Marathon.init();
+  Reading.init();
 
   try{
     const profile = await QV.restoreSession();
