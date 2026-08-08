@@ -56,6 +56,7 @@ const QV = (function(){
     activityLog: "qv_demo_activity_log", // مصفوفة بأحدث العمليات أولًا
     marathons: "qv_demo_marathons",       // مصفوفة كائنات الماراثون
     marathonPlayers: "qv_demo_marathon_players", // { marathonId: { userId: playerRow } }
+    readingPassages: "qv_demo_reading_passages", // مصفوفة كائنات الفقرات
   };
 
   function lsGet(key, fallback){
@@ -104,6 +105,8 @@ const QV = (function(){
       // عدّاد يومي منفصل: يسمح بمحاولتين (2) للتحدي العشوائي كل يوم، ويُصفَّر
       // تلقائيًا تمامًا كآلية "محاولة جديدة كل يوم" للاختبارات العادية
       random_challenge_daily_count: 0, random_challenge_daily_date: null,
+      // 📚 نظام القراءة — مستقل تمامًا عن الاختبارات
+      reading_allowed: false, reading_next_index: 0, reading_total_completed: 0,
       recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
       created_at: new Date().toISOString(),
     };
@@ -163,10 +166,11 @@ const QV = (function(){
           "random_challenges_played", "random_challenges_won", "random_challenge_perfect_count",
           "random_challenge_best_score", "random_challenge_best_category", "random_challenge_best_avg_time",
           "random_challenge_daily_count", "random_challenge_daily_date",
+          "reading_allowed", "reading_next_index", "reading_total_completed",
         ];
         const isMissingRcColumn = randomChallengeFields.some(f => (insertErr.message || "").includes(f));
         if (isMissingRcColumn){
-          console.warn("أعمدة إحصائيات التحدي العشوائي غير موجودة بعد في قاعدة البيانات — نفّذ sql/migrate_random_challenge.sql و sql/migrate_random_challenge_daily_limit.sql. تم إنشاء الحساب بدونها مؤقتًا.", insertErr);
+          console.warn("بعض الأعمدة الإضافية غير موجودة بعد في قاعدة البيانات (تحدٍ عشوائي/قراءة) — نفّذ ملفات SQL المطلوبة. تم إنشاء الحساب بدونها مؤقتًا.", insertErr);
           const fallbackProfile = { ...profile };
           randomChallengeFields.forEach(f => delete fallbackProfile[f]);
           const { error: retryErr } = await client.from("profiles").insert(fallbackProfile);
@@ -1439,6 +1443,116 @@ const QV = (function(){
     return channel;
   }
 
+  /* =========================================================
+     📚 READING SYSTEM (مرحلة قراءة مستقلة تمامًا عن الاختبارات)
+     =========================================================
+     المشرف يضيف فقرات مرقّمة بالترتيب. اللاعبون المسموح لهم فقط يحصلون على
+     5 فقرات في كل جلسة قراءة، تُقدَّم بالتسلسل (1-5 ثم 6-10 ...) عبر مؤشر
+     "reading_next_index" على ملف كل لاعب، ويلتف تلقائيًا للبداية بعد إكمال
+     كل الفقرات مرة واحدة على الأقل — بلا أي مؤقت أو أسئلة أو صلة بأي اختبار. */
+
+  async function getReadingPassages(){
+    if (demoMode){
+      return lsGet(LS_KEYS.readingPassages, []).filter(p => p.active !== false).sort((a, b) => a.order_index - b.order_index);
+    }
+    const { data, error } = await client.from("reading_passages").select("*").eq("active", true).order("order_index", { ascending: true });
+    if (error){ console.error(error); return []; }
+    return data || [];
+  }
+
+  async function getAllReadingPassagesAdmin(){
+    if (demoMode){
+      return lsGet(LS_KEYS.readingPassages, []).sort((a, b) => a.order_index - b.order_index);
+    }
+    const { data, error } = await client.from("reading_passages").select("*").order("order_index", { ascending: true });
+    if (error){ console.error(error); return []; }
+    return data || [];
+  }
+
+  async function saveReadingPassage(p){
+    if (demoMode){
+      let all = lsGet(LS_KEYS.readingPassages, []);
+      if (p.id){
+        all = all.map(item => item.id === p.id ? { ...item, ...p } : item);
+      } else {
+        p.id = "rp-" + Date.now();
+        p.active = p.active !== false;
+        p.created_at = new Date().toISOString();
+        all.push(p);
+      }
+      lsSet(LS_KEYS.readingPassages, all);
+      return p;
+    }
+    if (p.id){
+      const { data, error } = await client.from("reading_passages").update(p).eq("id", p.id).select().single();
+      if (error) throw error;
+      return data;
+    }
+    delete p.id;
+    const { data, error } = await client.from("reading_passages").insert(p).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function deleteReadingPassage(id){
+    if (demoMode){
+      lsSet(LS_KEYS.readingPassages, lsGet(LS_KEYS.readingPassages, []).filter(p => p.id !== id));
+      return true;
+    }
+    const { error } = await client.from("reading_passages").delete().eq("id", id);
+    if (error) throw error;
+    return true;
+  }
+
+  function setPlayerReadingAllowed(userId, allowed){
+    return updateProfile(userId, { reading_allowed: !!allowed });
+  }
+
+  /* يبني دفعة القراءة التالية للاعب (حتى 5 فقرات) بدءًا من مؤشره الحالي،
+     مع الالتفاف تلقائيًا لبداية القائمة عند الوصول لنهايتها — بلا أي تكرار
+     لفقرة قبل إكمال كل الفقرات مرة واحدة على الأقل */
+  async function getNextReadingBatch(userId){
+    const profile = await getProfile(userId);
+    if (!profile) throw new Error("اللاعب غير موجود");
+    if (!profile.reading_allowed) throw new Error("لا تملك صلاحية القراءة حاليًا — تواصل مع المشرف");
+
+    const passages = await getReadingPassages();
+    if (!passages.length) throw new Error("لا توجد فقرات قراءة متاحة بعد");
+
+    const total = passages.length;
+    const startIdx = (profile.reading_next_index || 0) % total;
+    const count = Math.min(5, total);
+    const batch = [];
+    for (let i = 0; i < count; i++){
+      batch.push(passages[(startIdx + i) % total]);
+    }
+    const nextIndex = (startIdx + count) % total;
+    return { batch, nextIndex, totalPassages: total };
+  }
+
+  /* يُستدعى عند ضغط اللاعب "تم" بعد قراءة الدفعة كاملة — يُحدَّث مؤشره،
+     إجمالي عدد الفقرات المقروءة (لترتيب "أكثر اللاعبين قراءة")، ثم يُعاد
+     الملف الشخصي المحدَّث */
+  async function completeReadingSession(userId, count, nextIndex){
+    const profile = await getProfile(userId);
+    if (!profile) throw new Error("اللاعب غير موجود");
+    return updateProfile(userId, {
+      reading_next_index: nextIndex,
+      reading_total_completed: (profile.reading_total_completed || 0) + count,
+    });
+  }
+
+  /* لوحة ترتيب مستقلة تمامًا — "📚 أكثر اللاعبين قراءة"، لا صلة لها بنقاط
+     الاختبارات أو أي لوحة متصدرين أخرى */
+  async function getReadingLeaderboard(){
+    const profiles = await listAllProfiles();
+    return profiles
+      .filter(p => (p.reading_total_completed || 0) > 0)
+      .slice()
+      .sort((a, b) => (b.reading_total_completed || 0) - (a.reading_total_completed || 0))
+      .map((p, i) => ({ ...p, rank: i + 1 }));
+  }
+
   /* ================= SUB ADMIN ACCOUNTS (يُنشئها المشرف الرئيسي فقط) =================
      صلاحيات محدودة: إدارة الغرف الجماعية والأسئلة الخاصة بغرفهم فقط. نفس آلية حماية
      كلمة المرور المستخدمة لحساب المشرف الرئيسي أعلاه (بصمة + تحقق عبر RPC من جهة
@@ -1736,5 +1850,8 @@ const QV = (function(){
     getMarathonPlayers, getMarathonPlayer, joinMarathon, allowMarathonReplay, resetMarathonAttempt,
     recordMarathonAnswer, finishMarathonSurvivor, finalizeMarathon, getMarathonLeaderboard, subscribeToMarathon,
     updateMarathonPlayer,
+
+    getReadingPassages, getAllReadingPassagesAdmin, saveReadingPassage, deleteReadingPassage,
+    setPlayerReadingAllowed, getNextReadingBatch, completeReadingSession, getReadingLeaderboard,
   };
 })();
