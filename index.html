@@ -266,6 +266,19 @@
     </div>
 
     <div class="glass-card" style="margin-top:16px">
+      <h3>📚 إحصائيات القراءة</h3>
+      <div class="stats-grid" id="reading-profile-stats"><!-- injected --></div>
+      <p class="reading-calendar-title" style="margin-top:14px">📅 تقويم القراءة (آخر 7 أيام)</p>
+      <div class="reading-calendar-row" id="reading-profile-calendar"><!-- injected --></div>
+    </div>
+
+    <div class="glass-card" style="margin-top:16px">
+      <h3>🏅 إنجازات القراءة</h3>
+      <p class="muted" style="margin-top:-4px">شارات تقديرية فقط — لا تمنح أي نقاط.</p>
+      <div class="achv-grid" id="reading-profile-achievements"><!-- injected --></div>
+    </div>
+
+    <div class="glass-card" style="margin-top:16px">
       <h3>🏅 كل الإنجازات</h3>
       <div class="achv-grid" id="profile-achievements"><!-- injected --></div>
     </div>
@@ -707,14 +720,29 @@
 
   <!-- ============ 📚 READING: SUCCESS ============ -->
   <section class="screen screen--reading-success" id="screen-reading-success">
-    <div class="reading-success-wrap">
-      <div class="reading-success-emoji">📚✨</div>
-      <h2>أحسنت!</h2>
-      <p class="muted">أكملت قراءة 5 فقرات جديدة</p>
+    <div class="reading-success-wrap glass-card reading-success-card">
+      <div class="reading-success-sparkles" aria-hidden="true">✨✨✨</div>
+      <div class="reading-success-emoji">📚</div>
+      <p class="reading-success-eyebrow">🎉 Reading Complete!</p>
+      <h2>5 Paragraphs Completed</h2>
+      <p class="muted">أحسنت! أكملت قراءة 5 فقرات جديدة</p>
+
       <div class="reading-success-stats">
         <div><strong id="reading-success-total">0</strong><span>إجمالي الفقرات المقروءة</span></div>
+        <div><strong id="reading-success-streak">0</strong><span>🔥 أيام متتالية</span></div>
       </div>
-      <button type="button" class="btn btn-primary" id="btn-reading-success-done">لوحتي الرئيسية</button>
+
+      <div class="reading-calendar" id="reading-calendar-wrap">
+        <p class="reading-calendar-title">📅 تقويم القراءة (آخر 7 أيام)</p>
+        <div class="reading-calendar-row" id="reading-calendar-row"><!-- injected --></div>
+      </div>
+
+      <div class="reading-unlock-banner" id="reading-unlock-banner" hidden>
+        <span id="reading-unlock-icon">🏅</span>
+        <span id="reading-unlock-text"></span>
+      </div>
+
+      <button type="button" class="btn btn-primary btn-block" id="btn-reading-success-done">لوحتي الرئيسية</button>
     </div>
   </section>
 
