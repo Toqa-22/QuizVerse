@@ -440,6 +440,7 @@ async function renderProfile(){
 
   renderRandomChallengeStats(p);
   renderMarathonProfileStats(p);
+  Reading.renderProfileSection(p);
   renderAchievements("profile-achievements", p, rank);
 }
 
