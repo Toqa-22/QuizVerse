@@ -107,6 +107,7 @@ const QV = (function(){
       random_challenge_daily_count: 0, random_challenge_daily_date: null,
       // 📚 نظام القراءة — مستقل تمامًا عن الاختبارات
       reading_allowed: false, reading_next_index: 0, reading_total_completed: 0,
+      reading_dates: [], reading_streak_current: 0, reading_streak_best: 0, reading_last_date: null,
       recent_questions: {},  // "فئة:مستوى" -> [معرّفات أسئلة أُجيب عنها مؤخرًا] لمنع التكرار
       created_at: new Date().toISOString(),
     };
@@ -167,6 +168,7 @@ const QV = (function(){
           "random_challenge_best_score", "random_challenge_best_category", "random_challenge_best_avg_time",
           "random_challenge_daily_count", "random_challenge_daily_date",
           "reading_allowed", "reading_next_index", "reading_total_completed",
+          "reading_dates", "reading_streak_current", "reading_streak_best", "reading_last_date",
         ];
         const isMissingRcColumn = randomChallengeFields.some(f => (insertErr.message || "").includes(f));
         if (isMissingRcColumn){
@@ -1531,14 +1533,34 @@ const QV = (function(){
   }
 
   /* يُستدعى عند ضغط اللاعب "تم" بعد قراءة الدفعة كاملة — يُحدَّث مؤشره،
-     إجمالي عدد الفقرات المقروءة (لترتيب "أكثر اللاعبين قراءة")، ثم يُعاد
-     الملف الشخصي المحدَّث */
+     إجمالي عدد الفقرات المقروءة (لترتيب "أكثر اللاعبين قراءة")، وسلسلة
+     الاستمرارية اليومية (streak) وسجلّ أيام القراءة (لتقويم القراءة)، ثم
+     يُعاد الملف الشخصي المحدَّث */
   async function completeReadingSession(userId, count, nextIndex){
     const profile = await getProfile(userId);
     if (!profile) throw new Error("اللاعب غير موجود");
+
+    const today = new Date().toISOString().slice(0, 10);
+    let streak = profile.reading_streak_current || 0;
+    if (profile.reading_last_date !== today){
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      streak = profile.reading_last_date === yesterday ? streak + 1 : 1;
+    }
+    const bestStreak = Math.max(profile.reading_streak_best || 0, streak);
+
+    const datesSet = new Set(profile.reading_dates || []);
+    datesSet.add(today);
+    // نحتفظ بآخر 60 يومًا فقط لتفادي تضخّم الحقل بلا داعٍ — يكفي تمامًا
+    // لتقويم أسبوعي/شهري ولحساب "عدد الأيام المختلفة" في الإنجازات
+    const dates = Array.from(datesSet).sort().slice(-60);
+
     return updateProfile(userId, {
       reading_next_index: nextIndex,
       reading_total_completed: (profile.reading_total_completed || 0) + count,
+      reading_dates: dates,
+      reading_streak_current: streak,
+      reading_streak_best: bestStreak,
+      reading_last_date: today,
     });
   }
 
