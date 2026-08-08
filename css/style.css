@@ -3,7 +3,6 @@
    نمط تصميمي جديد: ألوان زاهية ومرحة بطابع "نيو-بروتاليست"
    خفيف — بطاقات بيضاء بحدود سميكة وظلال صلبة بدل الزجاجية،
    بدلاً من الطابع الكحلي/الذهبي السينمائي السابق.
-
    ========================================================= */
 
 :root{
@@ -872,6 +871,40 @@ a{color:var(--violet-dark)}
   border:3px solid #ffb020 !important;
   animation:levelUpZoomIn .6s cubic-bezier(.2,.8,.3,1.2), levelUpGlow 1.8s ease-in-out infinite .6s;
 }
+
+/* ================= 📚 reading system ================= */
+.btn-reading{
+  background:linear-gradient(135deg,#8a5cf6,#f6b93b);
+  background-size:200% 200%;
+  color:#fff;font-weight:900;
+  animation:randomGradientShift 5s ease infinite;
+  box-shadow:5px 5px 0 var(--border);
+}
+.btn-reading:hover:not(:disabled){transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--border)}
+.btn-reading:active:not(:disabled){transform:translate(0,0);box-shadow:3px 3px 0 var(--border)}
+
+.reading-progress-track{
+  max-width:640px;margin:0 auto 18px;height:8px;border-radius:var(--radius-pill);
+  background:var(--surface-tint);border:1.5px solid var(--border-soft);overflow:hidden;
+}
+.reading-progress-fill{height:100%;background:linear-gradient(90deg,#8a5cf6,#f6b93b);border-radius:var(--radius-pill);transition:width .4s var(--ease)}
+
+.reading-card{min-height:200px}
+.reading-card h3{margin:0 0 12px}
+.reading-content{
+  font-size:1.05rem;line-height:1.9;white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;
+  animation:fadeUp .4s var(--ease);
+}
+.reading-actions{margin-top:18px}
+
+.reading-success-wrap{
+  min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;gap:6px;padding:16px;animation:levelUpZoomIn .5s cubic-bezier(.2,.8,.3,1.2);
+}
+.reading-success-emoji{font-size:4.5rem;line-height:1;margin-bottom:10px;animation:sparkleDrift 1.6s ease-in-out infinite alternate}
+.reading-success-stats{margin:18px 0}
+.reading-success-stats strong{font-size:2rem;display:block;color:#8a5cf6}
+.reading-success-stats span{font-size:.8rem;color:var(--ink-2);font-weight:600}
 .marathon-mix-note{
   margin:0;padding:10px 14px;border-radius:var(--radius-sm);text-align:center;font-weight:700;font-size:.85rem;
   background:var(--surface-tint);border:2px dashed #ffb020;color:var(--ink-1);
